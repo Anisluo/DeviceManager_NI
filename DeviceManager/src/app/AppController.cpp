@@ -5,7 +5,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QUrl>
 
 AppController::AppController(QStringList builtinRoots, QStringList binaryRoots, QString shadowDir,
@@ -37,6 +39,15 @@ AppController::AppController(QStringList builtinRoots, QStringList binaryRoots, 
         });
         m_registry.setPythonLoader([this](const PluginInfo& info, QString* err) {
             return m_python->loadPlugin(info, err);
+        });
+        // Real chassis: dm.discover.ni() (NI System Configuration) lists the instruments.
+        m_station.setDiscoverer([this](QString* note) {
+            QString err;
+            const QString text = m_python->callJson("dm.discover", "ni", "{}", &err);
+            if (!err.isEmpty()) { *note = QStringLiteral("仪器检测失败：%1").arg(err); return QJsonArray(); }
+            const QJsonObject r = QJsonDocument::fromJson(text.toUtf8()).object();
+            *note = r.value("note").toString();
+            return r.value("instruments").toArray();
         });
     }
 
@@ -111,9 +122,6 @@ bool AppController::loadStation(const QString& pathOrUrl)
     if (!m_data.open(QDir(dataDir).filePath("devicemanager.sqlite"), &dbErr))
         m_log.append("error", "data", QStringLiteral("无法打开数据库：%1").arg(dbErr));
 
-    m_log.append("info", "station",
-                 QStringLiteral("工位已加载：%1（%2 台设备，%3 个插件）")
-                     .arg(m_station.name()).arg(m_station.count()).arg(m_registry.count()));
     for (int i = 0; i < m_registry.rowCount(); ++i) {
         const QString e = m_registry.data(m_registry.index(i), PluginRegistry::ErrorRole).toString();
         if (!e.isEmpty())
@@ -121,6 +129,10 @@ bool AppController::loadStation(const QString& pathOrUrl)
                          m_registry.data(m_registry.index(i), PluginRegistry::IdRole).toString() + ": " + e);
     }
     m_station.openAll();
+    m_log.append("info", "station",
+                 QStringLiteral("工位已加载：%1（%2 台仪器，%3 个测试任务）")
+                     .arg(m_station.name()).arg(m_station.instrumentCount())
+                     .arg(m_station.count() - m_station.instrumentCount()));
     m_settings.setValue("station/last", m_station.path());
     return true;
 }

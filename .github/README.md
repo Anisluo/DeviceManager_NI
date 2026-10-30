@@ -9,11 +9,15 @@
 | `sdk/` | 插件 C ABI 头文件、Python `dm` 包、C++ / Python 插件模板 |
 | `scripts/` | `build.sh` 构建 + 测试，`package.sh` 打包 Windows 发布版 |
 
-## 插件
+## 设备与插件
+
+侧栏“设备”是检测到的仪器（真机用 NI 系统配置检测机箱里的板卡，仿真工位是一个虚拟 PXIe-1095 机箱），
+仪器驱动按型号自动匹配、不在侧栏列出；“插件”是测试任务，每个任务一个 DLL，通过主机调用检测到的仪器。
 
 | 插件 | 类型 | 说明 |
 |---|---|---|
-| `ni_digital` | Python | PXIe-6571 数字图形：pattern、SWD、shmoo、PPMU |
+| `tdc_measure` | C++ 测试任务 | TDC测量：四引脚信号生成（时钟 / 边沿触发 / 两路方波 + 延时）、运行 DemoPrj-TDC 图形，用检测到的 PXIe-6571 |
+| `ni_digital` | Python 驱动 | PXIe-6571：pattern、SWD、shmoo、PPMU；给测试任务提供图形加载与 burst |
 | `fpga_k7` | Python | XC7K480T 虚拟芯片平台：JTAG 下载 + UART 寄存器桥，附 RTL |
 | `foc_motor` | C++ | FOC 电机调试：USB 串口 DMFOC 协议（附固件 C 代码）、在线整定、示波器、校准/辨识 |
 | `sim_smu` / `sim_dmm` | C++ / Python | 仿真源表 / 万用表 |

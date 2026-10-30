@@ -74,6 +74,14 @@ build/bin/DeviceManager.exe --run ldo_line_regulation.py@1500 --action console=d
 
 第一条：页面控件 → C++ 插件。第二条：Python 序列 → C++ SMU + Python DMM，结果在"数据"页。
 
+## 设备与插件
+
+* **设备**：工位里检测到的仪器。真机工位（`"discover": "ni"`）用 NI 系统配置列出机箱里的板卡；
+  仿真工位（`stations/sim_bench.json`）是一个虚拟 PXIe-1095 机箱。仪器驱动不在侧栏列出，
+  每台仪器按型号自动用对应的驱动；没有驱动的型号灰显。
+* **插件**：测试任务，每个任务一个 DLL（如 `devices/tdc_measure` → TDC测量）。任务自己不打开仪器，
+  通过宿主调用检测到的仪器（`plugin_set_host`），所以真机和仿真用同一个 DLL。
+
 ## 脚本控制台
 
 底部面板"脚本控制台"：左边是序列编辑器（Ctrl+Enter / F5 运行，Ctrl+S 保存），右边是输出、`>>>` 交互提示符（↑/↓ 历史）和"数据"页（`dm.record()` 的表格 + XY 图）。脚本 API 见 `sdk/README.md` 第 3 节。

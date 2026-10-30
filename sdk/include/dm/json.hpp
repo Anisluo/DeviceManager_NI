@@ -93,6 +93,8 @@ public:
 
     // ---- array access ----
     const Json& operator[](size_t i) const { static const Json null_; return (t_ == Type::Array && i < a_.size()) ? a_[i] : null_; }
+    // j[0] would otherwise also match the string key overload (0 is a null pointer constant)
+    const Json& operator[](int i) const { static const Json null_; return i >= 0 ? (*this)[size_t(i)] : null_; }
     Json& push_back(Json v) {
         if (t_ == Type::Null) t_ = Type::Array;
         if (t_ != Type::Array) throw JsonError("not an array");

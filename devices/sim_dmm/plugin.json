@@ -6,8 +6,20 @@
   "entry": "sim_dmm:SimDmm",
   "abi": 1,
   "category": "instrument",
+  "models": [
+    "PXIe-4081",
+    "PXIe-4080"
+  ],
   "description": "Python 实现的 6½ 位仿真数字万用表：通过 probe 读取工位里另一台设备的节点，叠加增益/失调误差和随 NPLC 下降的噪声。",
-  "capabilities": ["dmm.dcv", "dmm.dci", "simulated"],
+  "capabilities": [
+    "dmm.dcv",
+    "dmm.dci",
+    "simulated"
+  ],
   "page": "page.json",
-  "default_config": { "resource": "SIMDMM0", "simulate": true, "options": {} }
+  "default_config": {
+    "resource": "SIMDMM0",
+    "simulate": true,
+    "options": {}
+  }
 }

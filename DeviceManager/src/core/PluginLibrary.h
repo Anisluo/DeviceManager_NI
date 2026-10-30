@@ -21,6 +21,7 @@ public:
     int   invoke(void* h, const char* method, const char* argsJson, char* out, int outLen) override;
     void  destroy(void* h) override;
     void  setCallback(void* h, dm_event_cb cb, void* user) override;
+    void  setHost(void* h, const dm_host_api* api) override;
 
 private:
     PluginLibrary() = default;
@@ -29,5 +30,6 @@ private:
     dm_create_fn       m_create = nullptr;
     dm_invoke_fn       m_invoke = nullptr;
     dm_destroy_fn      m_destroy = nullptr;
+    dm_set_host_fn     m_setHost = nullptr;
     dm_set_callback_fn m_setCallback = nullptr;
 };

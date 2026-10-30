@@ -1,0 +1,29 @@
+{
+  "id": "tdc_measure",
+  "name": "TDC测量",
+  "version": "0.2.0",
+  "type": "cpp",
+  "entry": "tdc_measure",
+  "abi": 1,
+  "category": "task",
+  "description": "测试任务：在检测到的 PXIe-6571 上跑 TDC 激励。按 CLK/TRIG/OUT1/OUT2 四个引脚的参数直接生成图形（连续时钟、边沿触发、两路方波和延时），预览波形后 burst；也能运行 Digital Pattern Editor 工程 DemoPrj-TDC 的图形：解码、时序分析、修改 repeat/set_loop 次数、规格/电平/时序查看。",
+  "requires": {
+    "digital": {
+      "models": [
+        "PXIe-6571"
+      ],
+      "doc": "运行图形用的数字图形仪器"
+    }
+  },
+  "capabilities": [
+    "tdc",
+    "digital.pattern"
+  ],
+  "page": "page.json",
+  "default_config": {
+    "options": {
+      "pattern": "TDC_M20_2",
+      "busy_delay_us": 120
+    }
+  }
+}

@@ -34,7 +34,9 @@ devices/<id>/
 | `type` | `cpp`（共享库）或 `python` |
 | `entry` | cpp：库名（不含前缀/扩展名），默认 = `id`；python：`模块:类`，如 `sim_dmm:SimDmm` |
 | `abi` | 必须为 `1` |
-| `category` | `instrument`（仪器）/ `task`（测试任务，出现在侧栏"测试任务"）/ `tool` |
+| `category` | `instrument`（仪器驱动，不在侧栏列出，用来控制检测到的仪器）/ `task`（测试任务，侧栏"插件"里列出，每个任务一个实例）/ `tool` |
+| `models` | 仪器驱动：支持的型号，如 `["PXIe-6571"]`；检测到这个型号的仪器就用这个驱动 |
+| `requires` | 测试任务：需要的仪器，如 `{"digital": {"models": ["PXIe-6571"]}}`；宿主在检测到的仪器里找，把设备名写进配置 `instruments.digital`（找不到为 `null`） |
 | `capabilities` | 能力标签，如 `dcpower.source_voltage`、`simulated` |
 | `page` | 页面文件，默认 `page.json` |
 | `default_config` | 工位文件未给出的配置项的默认值 |
@@ -49,6 +51,7 @@ int         plugin_invoke(void* h, const char* method, const char* args_json,
                           char* out_json, int out_len);
 void        plugin_destroy(void* h);
 void        plugin_set_callback(void* h, dm_event_cb cb, void* user);
+void        plugin_set_host(void* h, const dm_host_api* api);   // 可选
 ```
 
 * `config_json` = 工位文件中该设备除 `name`/`plugin` 以外的全部字段，例如
@@ -58,6 +61,10 @@ void        plugin_set_callback(void* h, dm_event_cb cb, void* user);
 * `"$methods"` 返回方法列表 `[{name, doc, args}]`，宿主的"方法调试"面板用它。
 * 宿主保证同一句柄上的调用串行（每台设备一个工作线程），不同设备可并行。
 * 事件回调可在任意线程调用；约定类型：`{"type":"log","level","message"}`、`{"type":"state",...}`、`{"type":"data",...}`。
+* `plugin_set_host`（可选）把宿主服务交给实例：`api->invoke(ctx, device, method, args_json, sink, user)`
+  同步调用工位里另一台设备的方法，结果交给 `sink`。测试任务用它驱动仪器；C++ 便捷层里是
+  `host_call("dig1", "pattern_start", args)`，出错时抛 `PluginError`。设备不能调用自己。
+* 宿主还会在配置里放 `plugin_dir`（plugin.json 所在目录），插件可以从这里找自带的文件。
 
 ### C++ 便捷层
 
@@ -217,6 +224,20 @@ dm.report.export(r.run_id, fmt="pdf")                       # HTML / PDF 报告�
 ```
 
 `plugin_paths` 相对工位文件；宿主还会搜索源码树 `devices/` 和安装目录 `<prefix>/devices`。
+
+### 仪器检测
+
+```json
+{ "name": "8881 · 机箱检测", "discover": "ni", "devices": [] }
+{ "name": "仿真机箱", "discover": "sim",
+  "sim_inventory": [ { "name": "dig1", "model": "PXIe-6571", "resource": "PXI1Slot15", "slot": 15, "options": {} } ] }
+```
+
+* `"discover": "ni"`：用 NI 系统配置（与 NI MAX 相同的数据，`pip install nisyscfg`）列出机箱里的板卡，
+  设备名是 MAX 里的别名。`"sim"`：按 `sim_inventory` 生成一个仿真机箱。不写：只有 `devices` 里手动列的设备。
+* 每台检测到的仪器按型号找驱动（驱动 plugin.json 的 `models`）；没有驱动的型号也会列出，状态为“无驱动”。
+* 每个 `category: "task"` 的插件自动建一个实例（设备名 = 插件 id），按 `requires` 绑定仪器；
+  侧栏“设备”只列仪器，“插件”只列测试任务。
 
 ## 6. 热重载
 

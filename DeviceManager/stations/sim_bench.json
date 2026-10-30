@@ -1,15 +1,92 @@
 {
-  "name": "仿真开发工位",
-  "description": "无硬件开发用：PXIe-6571（Python 插件，纯仿真 + 虚拟 Cortex-M0）、两台仿真 SMU（C++）、一台仿真 DMM（Python，探测 smu1 的 LDO 输出）。另有 FOC 电机调试（C++ 插件，仿真控制板）。切换芯片或工位时只需换这个文件。",
+  "name": "仿真机箱",
+  "description": "无硬件开发用的虚拟 PXIe-1095 机箱（PXIe-8881 控制器）：设备列表按机箱里的板卡自动生成，有驱动的板卡用仿真驱动；测试任务（插件）自动使用需要的仪器。",
   "plugin_paths": [],
-  "default_page": "dig1",
+  "default_page": "tdc_measure",
   "data_dir": "../../data",
-  "devices": [
+  "discover": "sim",
+  "sim_inventory": [
+    {
+      "name": "scope1",
+      "model": "PXIe-5922",
+      "resource": "PXI1Slot2",
+      "slot": 2
+    },
+    {
+      "name": "smu1",
+      "model": "PXIe-4145",
+      "resource": "PXI1Slot3",
+      "slot": 3,
+      "options": {
+        "channels": 4,
+        "power_on": {
+          "voltage": 3.6,
+          "current_limit": 0.05,
+          "output": true,
+          "load": "ldo",
+          "r_load": 330
+        }
+      }
+    },
+    {
+      "name": "smu2",
+      "model": "PXIe-4135",
+      "resource": "PXI1Slot4",
+      "slot": 4,
+      "options": {
+        "channels": 1,
+        "noise_i": 2e-08,
+        "noise_v": 0.0001
+      }
+    },
+    {
+      "name": "dmm1",
+      "model": "PXIe-4081",
+      "resource": "PXI1Slot5",
+      "slot": 5,
+      "options": {
+        "probe": {
+          "device": "smu1",
+          "method": "measure",
+          "args": {
+            "channel": 0
+          },
+          "field": "load_v"
+        }
+      }
+    },
+    {
+      "name": "PXI1Slot6",
+      "model": "PXIe-4463",
+      "resource": "PXI1Slot6",
+      "slot": 6
+    },
+    {
+      "name": "dmm2",
+      "model": "PXIe-4080",
+      "resource": "PXI1Slot7",
+      "slot": 7
+    },
+    {
+      "name": "smu3",
+      "model": "PXIe-4139",
+      "resource": "PXI1Slot8",
+      "slot": 8,
+      "options": {
+        "channels": 1
+      }
+    },
+    {
+      "name": "PXI1Slot9",
+      "model": "PXIe-6509",
+      "resource": "PXI1Slot9",
+      "slot": 9
+    },
     {
       "name": "dig1",
-      "plugin": "ni_digital",
+      "model": "PXIe-6571",
       "resource": "PXI1Slot15",
-      "simulate": true,
+      "slot": 15,
       "options": {
         "backend": "sim",
         "vdd": 3.3,
@@ -33,66 +110,20 @@
       }
     },
     {
-      "name": "smu1",
-      "plugin": "sim_smu",
-      "resource": "SIM1",
-      "simulate": true,
-      "options": {
-        "channels": 4,
-        "power_on": {
-          "voltage": 3.6,
-          "current_limit": 0.05,
-          "output": true,
-          "load": "ldo",
-          "r_load": 330
-        }
-      }
-    },
-    {
-      "name": "smu2",
-      "plugin": "sim_smu",
-      "resource": "SIM2",
-      "simulate": true,
-      "options": {
-        "channels": 4,
-        "noise_i": 2e-08,
-        "noise_v": 0.0001
-      }
-    },
-    {
-      "name": "dmm1",
-      "plugin": "sim_dmm",
-      "resource": "SIMDMM1",
-      "simulate": true,
-      "options": {
-        "probe": {
-          "device": "smu1",
-          "method": "measure",
-          "args": {
-            "channel": 0
-          },
-          "field": "load_v"
-        }
-      }
+      "name": "PXI1Slot16",
+      "model": "PXIe-4309",
+      "resource": "PXI1Slot16",
+      "slot": 16
     },
     {
       "name": "motor1",
-      "plugin": "foc_motor",
-      "resource": "FOC-SIM",
-      "simulate": true,
+      "model": "FOC 控制板",
+      "resource": "COM-SIM",
       "options": {
         "port": "sim",
         "auto_connect": true
       }
-    },
-    {
-      "name": "tdc1",
-      "plugin": "tdc_6571",
-      "resource": "PXI1Slot15",
-      "simulate": true,
-      "options": {
-        "pattern": "TDC_M20_2"
-      }
     }
-  ]
+  ],
+  "devices": []
 }

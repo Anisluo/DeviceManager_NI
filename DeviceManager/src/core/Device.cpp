@@ -12,8 +12,30 @@
 #include <vector>
 
 static QJSEngine* g_jsEngine = nullptr;
+static Device::Resolver g_resolver;
 
 void Device::setJsEngine(QJSEngine* engine) { g_jsEngine = engine; }
+void Device::setResolver(Resolver r) { g_resolver = std::move(r); }
+
+// plugin_set_host: a plugin (a test task) calls a method on another device of the station.
+// Runs on the caller's thread and takes the target device's call lock, like invoke().
+int Device::hostInvokeThunk(void* ctx, const char* device, const char* method, const char* args,
+                            dm_sink_fn sink, void* sinkUser)
+{
+    auto* self = static_cast<Device*>(ctx);
+    auto reply = [&](int rc, const QByteArray& json) {
+        if (sink) sink(json.constData(), sinkUser);
+        return rc;
+    };
+    const QString name = QString::fromUtf8(device ? device : "");
+    Device* target = g_resolver ? g_resolver(name) : nullptr;
+    if (!target)
+        return reply(DM_E_STATE, QJsonDocument(QJsonObject{{"error", QStringLiteral("没有设备 %1").arg(name)}}).toJson(QJsonDocument::Compact));
+    if (target == self)
+        return reply(DM_E_STATE, R"({"error":"a device cannot call itself"})");
+    const Result r = target->invokeRaw(QByteArray(method ? method : ""), QByteArray(args && *args ? args : "{}"));
+    return reply(r.rc, r.json);
+}
 
 Device::Device(QString name, QString pluginId, QJsonObject config, QObject* parent)
     : QObject(parent), m_name(std::move(name)), m_pluginId(std::move(pluginId)), m_config(std::move(config))
@@ -53,6 +75,8 @@ bool Device::open(std::shared_ptr<PluginModule> lib)
         return false;
     }
     m_lib->setCallback(m_handle, &Device::eventThunk, this);
+    m_hostApi = dm_host_api{int(sizeof(dm_host_api)), this, &Device::hostInvokeThunk};
+    m_lib->setHost(m_handle, &m_hostApi);
     ++m_generation;
     setStatus("online");
     emit reopened();
@@ -81,13 +105,28 @@ void Device::fail(const QString& error)
     setStatus("error", error);
 }
 
+QString Device::instrumentsText() const
+{
+    QStringList parts;
+    const QJsonObject inst = m_config.value("instruments").toObject();
+    for (auto it = inst.begin(); it != inst.end(); ++it)
+        parts << (it.value().isString() ? it.value().toString() : QStringLiteral("%1 未找到").arg(it.key()));
+    return parts.join(", ");
+}
+
+void Device::unsupported(const QString& why)
+{
+    close();
+    setStatus("nodriver", why);
+}
+
 void Device::setStatus(const QString& s, const QString& err)
 {
     if (m_status == s && m_lastError == err) return;
     m_status = s;
     m_lastError = err;
     emit statusChanged();
-    if (!err.isEmpty()) emit log("error", err);
+    if (!err.isEmpty()) emit log(s == QLatin1String("nodriver") ? "info" : "error", err);
 }
 
 Device::Result Device::invokeRaw(const QByteArray& method, const QByteArray& argsJson)

@@ -464,6 +464,42 @@ class NiDigital(Plugin):
         self.swd = None
         return r
 
+    # ------------------------------------------------------------------ project patterns
+    # For test tasks (e.g. TDC测量), called through the host: load a Digital Pattern Editor
+    # project, burst one pattern at a time without waiting, poll, abort. Loading a project
+    # replaces this instrument's pin map, so the SWD functions need a reset afterwards.
+    @method("Load a pattern project: pin map, specifications, levels and timing sheets (file paths)")
+    def pattern_project(self, pinmap: str, specs: list = None, levels: list = None, timing: list = None):
+        self.swd = None
+        return self.backend.project_open(pinmap, specs or [], levels or [], timing or [])
+
+    @method("Apply a timing sheet (loading it first if needed)")
+    def pattern_timing(self, path: str):
+        return self.backend.use_timing(path)
+
+    @method("Replace the specifications file and re-apply levels and timing")
+    def pattern_specs(self, path: str):
+        return self.backend.set_specs(path)
+
+    @method("Burst one pattern without waiting; sim_seconds is the run time of a simulated burst")
+    def pattern_start(self, path: str, label: str, sim_seconds: float = 0.0):
+        self.backend.burst_start(path, label, float(sim_seconds))
+        self.burst_pins = None
+        return {"started": label}
+
+    @method("Burst state: done, pass/fail and per-pin fail counts once done")
+    def pattern_status(self, pins: list = None):
+        done = self.backend.burst_done()
+        out = {"done": done}
+        if done:
+            out["pass"], out["fail_count"] = self.backend.burst_result(pins or [])
+        return out
+
+    @method("Abort a running burst")
+    def pattern_abort(self):
+        self.backend.burst_abort()
+        return {"aborted": True}
+
     @method("Loaded pattern names")
     def list_patterns(self):
         return {"patterns": sorted(getattr(self.backend, "patterns", {}) or [])}

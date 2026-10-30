@@ -36,6 +36,7 @@ std::shared_ptr<PluginLibrary> PluginLibrary::load(const QString& path, const QS
     lib->m_invoke      = reinterpret_cast<dm_invoke_fn>(lib->m_lib.resolve("plugin_invoke"));
     lib->m_destroy     = reinterpret_cast<dm_destroy_fn>(lib->m_lib.resolve("plugin_destroy"));
     lib->m_setCallback = reinterpret_cast<dm_set_callback_fn>(lib->m_lib.resolve("plugin_set_callback"));
+    lib->m_setHost     = reinterpret_cast<dm_set_host_fn>(lib->m_lib.resolve("plugin_set_host"));
 
     if (!manifest || !lib->m_create || !lib->m_invoke || !lib->m_destroy) {
         if (error) *error = QStringLiteral("missing required exports (plugin_manifest/create/invoke/destroy)");
@@ -73,4 +74,9 @@ void PluginLibrary::destroy(void* h) { m_destroy(h); }
 void PluginLibrary::setCallback(void* h, dm_event_cb cb, void* user)
 {
     if (m_setCallback) m_setCallback(h, cb, user);
+}
+
+void PluginLibrary::setHost(void* h, const dm_host_api* api)
+{
+    if (m_setHost) m_setHost(h, api);
 }

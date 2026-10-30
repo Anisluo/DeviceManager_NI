@@ -232,6 +232,79 @@ class DriverBackend:
                 fails[p] = 0
         return {"pass": passed, "fail_count": fails}
 
+    # ---- project patterns (used by test tasks through the host) ----
+    def project_open(self, pinmap, specs, levels, timing):
+        """Load a Digital Pattern Editor project's sheets; replaces the station pin map."""
+        self.s.load_pin_map(pinmap)
+        self.pinmap = pinmap
+        self.compiled = {}                              # SWD patterns belong to the old pin map
+        self.s.load_specifications_levels_and_timing(specs or None, levels or None, timing or None)
+        self.proj = {"levels": (levels or [None])[0], "specs": list(specs or []),
+                     "timing_loaded": set(timing or []), "timing_applied": None, "loaded": None}
+        if levels and timing:
+            self.use_timing(timing[0])
+        return {"pinmap": pinmap, "timing": list(timing or [])}
+
+    def _sheet(self, path):
+        return os.path.splitext(os.path.basename(path))[0]
+
+    def use_timing(self, path):
+        pr = self._proj()
+        if path not in pr["timing_loaded"]:
+            self.s.load_specifications_levels_and_timing(None, None, [path])
+            pr["timing_loaded"].add(path)
+        if path != pr["timing_applied"] and pr["levels"]:
+            self.s.apply_levels_and_timing(self._sheet(pr["levels"]), self._sheet(path))
+            pr["timing_applied"] = path
+        return {"applied": path}
+
+    def set_specs(self, path):
+        pr = self._proj()
+        try:
+            if pr["specs"]:
+                self.s.unload_specifications(pr["specs"])
+        except Exception:  # noqa: BLE001 — older drivers: load over the old sheet
+            pass
+        self.s.load_specifications_levels_and_timing([path], None, None)
+        pr["specs"] = [path]
+        if pr["timing_applied"] and pr["levels"]:
+            self.s.apply_levels_and_timing(self._sheet(pr["levels"]), self._sheet(pr["timing_applied"]))
+        return {"specs": path}
+
+    def _proj(self):
+        if not getattr(self, "proj", None):
+            raise RuntimeError("no pattern project loaded (pattern_project first)")
+        return self.proj
+
+    def burst_start(self, path, label, seconds):
+        pr = self._proj()
+        if pr["loaded"] != path:
+            self.s.unload_all_patterns()
+            self.s.load_pattern(path)
+            pr["loaded"] = path
+        self.s.burst_pattern(label, select_digital_function=True, wait_until_done=False)
+
+    def burst_done(self):
+        return bool(self.s.is_done())
+
+    def burst_result(self, pins):
+        try:
+            sites = self.s.get_site_pass_fail()
+            passed = all(sites.values()) if isinstance(sites, dict) else bool(sites)
+        except Exception:  # noqa: BLE001
+            passed = None
+        fails = {}
+        for p in pins:
+            try:
+                fc = self.s.pins[p].get_fail_count()
+                fails[p] = int(fc[0] if isinstance(fc, (list, tuple)) else fc)
+            except Exception:  # noqa: BLE001 — pin not in the pattern
+                pass
+        return passed, fails
+
+    def burst_abort(self):
+        self.s.abort()
+
     # ---- SWD over patterns ----
     def _swd_timeset(self, frequency):
         nd, ht = self.nidigital, self.hightime

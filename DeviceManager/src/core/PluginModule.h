@@ -20,6 +20,8 @@ public:
     virtual int   invoke(void* h, const char* method, const char* argsJson, char* out, int outLen) = 0;
     virtual void  destroy(void* h) = 0;
     virtual void  setCallback(void* h, dm_event_cb cb, void* user) = 0;
+    // Hands an instance the host services (plugin_set_host); a no-op for plugins without it.
+    virtual void  setHost(void* /*h*/, const dm_host_api* /*api*/) {}
 
 protected:
     QString m_path;

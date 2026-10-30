@@ -1,6 +1,6 @@
 {
  "title": "TDC测量",
- "subtitle": "PXIe-6571 · 时钟 / 触发 / 两路方波 · DemoPrj-TDC",
+ "subtitle": "测试任务 · PXIe-6571 · 时钟 / 触发 / 两路方波 · DemoPrj-TDC",
  "columns": 12,
  "sources": [
   {
@@ -690,9 +690,9 @@
       },
       {
        "type": "readout",
-       "label": "循环",
+       "label": "已完成循环",
        "source": "st",
-       "field": "loops_text",
+       "field": "loops_done",
        "digits": 5
       },
       {

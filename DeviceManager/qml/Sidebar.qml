@@ -64,7 +64,7 @@ Rectangle {
                 SidebarItem {
                     Layout.fillWidth: true
                     text: App.station.name
-                    detail: App.station.count + " 台"
+                    detail: App.station.instrumentCount + " 台"
                     selected: sidebar.current.kind === "station"
                     onClicked: sidebar.navigate("station", "")
                 }
@@ -77,36 +77,58 @@ Rectangle {
                     onClicked: sidebar.navigate("data", "")
                 }
 
+                // Instruments detected in the chassis (or the simulated one); drivers stay hidden.
                 SectionLabel { text: "设备" }
                 Repeater {
                     model: App.station
                     delegate: SidebarItem {
                         required property var model
                         required property string name
-                        required property string pluginId
+                        required property string kind
+                        visible: kind === "instrument"
                         Layout.fillWidth: true
+                        Layout.preferredHeight: visible ? implicitHeight : 0
                         text: name
-                        detail: pluginId
-                        status: model.status
+                        detail: model.instrumentModel || ""
+                        status: model.status || ""
+                        dimmed: model.status === "nodriver"
                         selected: sidebar.current.kind === "device" && sidebar.current.id === name
                         onClicked: sidebar.navigate("device", name)
                     }
                 }
+                Text {
+                    visible: App.station.instrumentCount === 0
+                    text: App.station.discoverNote || "没有检测到仪器"
+                    color: Theme.textFaint
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.fontSm
+                    leftPadding: 10
+                    topPadding: 4
+                    bottomPadding: 4
+                }
 
-                SectionLabel { text: "测试任务" }
+                // Plugins are the test tasks (one DLL each); a task opens its own page.
+                SectionLabel { text: "插件" }
                 Repeater {
                     id: taskRepeater
                     model: App.plugins
                     delegate: SidebarItem {
                         required property string pluginId
                         required property string name
+                        required property string version
                         required property string category
+                        required property string error
+                        readonly property var dev: App.station.count >= 0 ? App.station.device(pluginId) : null
                         visible: category === "task"
                         Layout.fillWidth: true
                         Layout.preferredHeight: visible ? implicitHeight : 0
                         text: name
-                        selected: sidebar.current.kind === "plugin" && sidebar.current.id === pluginId
-                        onClicked: sidebar.navigate("plugin", pluginId)
+                        detail: version
+                        status: error !== "" ? "error" : dev ? dev.status : ""
+                        selected: sidebar.current.kind === "device" && sidebar.current.id === pluginId
+                        onClicked: sidebar.navigate(dev ? "device" : "plugin", pluginId)
                     }
                 }
                 Text {
@@ -123,23 +145,6 @@ Rectangle {
                     leftPadding: 10
                     topPadding: 4
                     bottomPadding: 4
-                }
-
-                SectionLabel { text: "插件" }
-                Repeater {
-                    model: App.plugins
-                    delegate: SidebarItem {
-                        required property string pluginId
-                        required property string name
-                        required property string version
-                        required property string error
-                        Layout.fillWidth: true
-                        text: name
-                        detail: version
-                        status: error !== "" ? "error" : ""
-                        selected: sidebar.current.kind === "plugin" && sidebar.current.id === pluginId
-                        onClicked: sidebar.navigate("plugin", pluginId)
-                    }
                 }
             }
         }

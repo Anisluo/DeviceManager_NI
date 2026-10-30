@@ -6,8 +6,24 @@
   "entry": "sim_smu",
   "abi": 1,
   "category": "instrument",
+  "models": [
+    "PXIe-4145",
+    "PXIe-4135",
+    "PXIe-4139"
+  ],
   "description": "4 通道仿真源测量单元（±6 V / 500 mA），带噪声、限流和可选负载模型（电阻 / 二极管 / LDO）。无需硬件即可开发页面与测试序列。",
-  "capabilities": ["dcpower.source_voltage", "dcpower.measure", "dcpower.channels:4", "simulated"],
+  "capabilities": [
+    "dcpower.source_voltage",
+    "dcpower.measure",
+    "dcpower.channels:4",
+    "simulated"
+  ],
   "page": "page.json",
-  "default_config": { "resource": "SIM0", "simulate": true, "options": { "channels": 4 } }
+  "default_config": {
+    "resource": "SIM0",
+    "simulate": true,
+    "options": {
+      "channels": 4
+    }
+  }
 }

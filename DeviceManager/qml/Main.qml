@@ -85,8 +85,11 @@ ApplicationWindow {
                     }
                     Text {
                         visible: window.view.kind !== "station"
+                        readonly property var dev: window.view.kind === "device" && App.station.count >= 0
+                                                   ? App.station.device(window.view.id) : null
                         text: window.view.kind === "plugin" ? "插件 · " + window.view.id
-                            : window.view.kind === "data" ? "测试数据" : window.view.id
+                            : window.view.kind === "data" ? "测试数据"
+                            : dev && dev.kind === "task" ? "插件 · " + dev.model : window.view.id
                         color: Theme.text
                         font.family: Theme.sans
                         font.pixelSize: Theme.fontMd

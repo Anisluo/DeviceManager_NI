@@ -134,7 +134,10 @@ Item {
                         spacing: 8
                         StatusDot { status: ctx.device ? ctx.device.status : "offline" }
                         Text {
-                            text: ctx.device ? ctx.device.name + "  ·  " + ctx.device.pluginId + " @ " + ctx.device.resource : ""
+                            text: !ctx.device ? ""
+                                : ctx.device.kind === "task" ? "测试任务" + (ctx.device.instrumentsText ? "  ·  使用 " + ctx.device.instrumentsText : "")
+                                : ctx.device.name + "  ·  " + ctx.device.model + (ctx.device.resource ? " @ " + ctx.device.resource : "")
+                                  + (ctx.device.pluginId ? "  ·  驱动 " + ctx.device.pluginId : "")
                             color: Theme.textMuted
                             font.family: Theme.sans
                             font.pixelSize: Theme.fontMd
@@ -163,7 +166,8 @@ Item {
 
             // Errors
             Rectangle {
-                visible: !!ctx.page.error || (ctx.device && ctx.device.lastError !== "")
+                visible: (!!ctx.page.error && !(ctx.device && ctx.device.status === "nodriver"))
+                         || (ctx.device && ctx.device.lastError !== "")
                 Layout.fillWidth: true
                 radius: Theme.radiusSm
                 color: Theme.errorSoft
@@ -174,14 +178,15 @@ Item {
                     Text {
                         id: errText
                         Layout.fillWidth: true
-                        text: ctx.page.error || (ctx.device ? ctx.device.lastError : "")
-                        color: Theme.error
+                        text: ctx.device && ctx.device.status === "nodriver" ? ctx.device.lastError + "。可以照常在 NI MAX 或其他软件里使用它；需要在这里控制时再为该型号添加驱动插件。"
+                            : ctx.page.error || (ctx.device ? ctx.device.lastError : "")
+                        color: ctx.device && ctx.device.status === "nodriver" ? Theme.textMuted : Theme.error
                         wrapMode: Text.Wrap
                         font.family: Theme.sans
                         font.pixelSize: Theme.fontMd
                     }
                     DmButton {
-                        visible: ctx.device && !ctx.device.online
+                        visible: ctx.device && !ctx.device.online && ctx.device.status !== "nodriver"
                         text: "重新连接"
                         compact: true
                         onClicked: App.station.reopen(ctx.device.name)

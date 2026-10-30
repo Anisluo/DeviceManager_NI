@@ -12,6 +12,7 @@
 #include <vector>
 #include <QVariant>
 
+#include <functional>
 #include <memory>
 
 class QJSEngine;
@@ -28,15 +29,24 @@ class Device : public QObject {
     Q_PROPERTY(QString lastError READ lastError NOTIFY statusChanged)
     Q_PROPERTY(bool online READ online NOTIFY statusChanged)
     Q_PROPERTY(int generation READ generation NOTIFY reopened)        // bumps on every (re)open
+    Q_PROPERTY(QString model READ model CONSTANT)
+    Q_PROPERTY(QString kind READ kind CONSTANT)                       // instrument | task
+    Q_PROPERTY(QString instrumentsText READ instrumentsText CONSTANT) // task: "digital=dig1, ..."
 public:
     Device(QString name, QString pluginId, QJsonObject config, QObject* parent = nullptr);
     ~Device() override;
 
     static void setJsEngine(QJSEngine* engine);
+    // How a plugin's host_call() finds the device it names (set by the station).
+    using Resolver = std::function<Device*(const QString& name)>;
+    static void setResolver(Resolver r);
 
     QString name() const { return m_name; }
     QString pluginId() const { return m_pluginId; }
     QString resource() const { return m_config.value("resource").toString(); }
+    QString model() const { return m_config.value("model").toString(); }
+    QString kind() const { return m_config.value("kind").toString("instrument"); }   // instrument | task
+    QString instrumentsText() const;
     QString status() const { return m_status; }
     QString lastError() const { return m_lastError; }
     bool online() const { return m_status == QLatin1String("online"); }
@@ -49,6 +59,8 @@ public:
     bool open(std::shared_ptr<PluginModule> lib);
     void close();
     void fail(const QString& error);
+    // An instrument that was found but has no driver plugin (status "nodriver").
+    void unsupported(const QString& why);
 
     // Asynchronous call for QML: cb(ok, result) runs on the UI thread.
     Q_INVOKABLE void call(const QString& method, const QVariantMap& args = {},
@@ -68,6 +80,8 @@ signals:
 
 private:
     static void eventThunk(const char* evt, void* user);
+    static int hostInvokeThunk(void* ctx, const char* device, const char* method, const char* args,
+                               dm_sink_fn sink, void* sinkUser);
     void setStatus(const QString& s, const QString& err = {});
 
     QString m_name, m_pluginId;
@@ -78,6 +92,7 @@ private:
 
     std::shared_ptr<PluginModule> m_lib;
     void* m_handle = nullptr;
+    dm_host_api m_hostApi{};
     QMutex m_callMutex;          // serialises plugin_invoke across pool + sync callers
     QThreadPool m_pool;
     std::vector<char> m_invokeBuf;     // reply buffer for invokeRaw (under m_callMutex)

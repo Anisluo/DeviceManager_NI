@@ -42,6 +42,8 @@ public:
     void log(const QString& level, const QString& source, const QString& message) const;
 
     std::shared_ptr<PluginModule> loadPlugin(const PluginInfo& info, QString* error);
+    // module.function(**json.loads(argsJson)) -> json.dumps(result); "" and *error on failure.
+    QString callJson(const QString& module, const QString& function, const QString& argsJson, QString* error);
 
 private:
     struct Impl;

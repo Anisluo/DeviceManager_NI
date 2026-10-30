@@ -9,9 +9,16 @@
 #include <QQmlEngine>
 
 Station::Station(PluginRegistry* registry, QObject* parent)
-    : QAbstractListModel(parent), m_registry(registry) {}
+    : QAbstractListModel(parent), m_registry(registry)
+{
+    Device::setResolver([this](const QString& name) { return device(name); });
+}
 
-Station::~Station() { clearDevices(); }
+Station::~Station()
+{
+    Device::setResolver({});
+    clearDevices();
+}
 
 bool Station::load(const QString& path, QString* error)
 {
@@ -35,44 +42,99 @@ bool Station::load(const QString& path, QString* error)
     m_description = s.value("description").toString();
     m_defaultPage = s.value("default_page").toString();
     m_dataDir = s.contains("data_dir") ? QDir::cleanPath(base.absoluteFilePath(s.value("data_dir").toString())) : QString();
+    m_discover = s.value("discover").toString();
+    m_discoverNote.clear();
+    m_manual = s.value("devices").toArray();
+    m_simInventory = s.value("sim_inventory").toArray();
     m_pluginPaths.clear();
     for (const auto& p : s.value("plugin_paths").toArray())
         m_pluginPaths << QDir::cleanPath(base.absoluteFilePath(p.toString()));
-
-    for (const auto& v : s.value("devices").toArray()) {
-        const QJsonObject d = v.toObject();
-        const QString name = d.value("name").toString();
-        const QString plugin = d.value("plugin").toString();
-        if (name.isEmpty() || plugin.isEmpty()) continue;
-
-        // Everything except name/plugin is handed to plugin_create as config.
-        QJsonObject cfg = d;
-        cfg.remove("name");
-        cfg.remove("plugin");
-        auto* dev = new Device(name, plugin, cfg, this);
-        QQmlEngine::setObjectOwnership(dev, QQmlEngine::CppOwnership);
-        connect(dev, &Device::log, this, [this, dev](const QString& level, const QString& msg) {
-            emit deviceLog(level, dev->name(), msg);
-        });
-        connect(dev, &Device::statusChanged, this, [this, dev] {
-            const int row = int(m_devices.indexOf(dev));
-            if (row >= 0) emit dataChanged(index(row), index(row), {StatusRole});
-        });
-        m_devices.append(dev);
-    }
     endResetModel();
     emit loaded();
     return true;
 }
 
+Device* Station::addDevice(const QString& name, const QString& plugin, QJsonObject cfg)
+{
+    if (name.isEmpty() || device(name)) return nullptr;
+    auto* dev = new Device(name, plugin, std::move(cfg), this);
+    QQmlEngine::setObjectOwnership(dev, QQmlEngine::CppOwnership);
+    connect(dev, &Device::log, this, [this, dev](const QString& level, const QString& msg) {
+        emit deviceLog(level, dev->name(), msg);
+    });
+    connect(dev, &Device::statusChanged, this, [this, dev] {
+        const int row = int(m_devices.indexOf(dev));
+        if (row >= 0) emit dataChanged(index(row), index(row), {StatusRole});
+    });
+    m_devices.append(dev);
+    return dev;
+}
+
+QString Station::driverForModel(const QString& model) const
+{
+    for (int i = 0; i < m_registry->rowCount(); ++i) {
+        const QString id = m_registry->data(m_registry->index(i), PluginRegistry::IdRole).toString();
+        const PluginInfo* p = m_registry->find(id);
+        if (!p) continue;
+        for (const auto& m : p->manifest.value("models").toArray())
+            if (m.toString().compare(model, Qt::CaseInsensitive) == 0) return p->id;
+    }
+    return {};
+}
+
+void Station::addInstruments(const QJsonArray& found, bool simulate)
+{
+    for (const auto& v : found) {
+        QJsonObject cfg = v.toObject();
+        const QString name = cfg.value("name").toString(cfg.value("resource").toString());
+        const QString driver = cfg.contains("driver") ? cfg.value("driver").toString()
+                                                      : driverForModel(cfg.value("model").toString());
+        cfg.remove("name");
+        cfg.remove("driver");
+        cfg.insert("kind", "instrument");
+        if (!cfg.contains("simulate")) cfg.insert("simulate", simulate);
+        addDevice(name, driver, cfg);
+    }
+}
+
+void Station::addTasks()
+{
+    for (int i = 0; i < m_registry->rowCount(); ++i) {
+        const QString id = m_registry->data(m_registry->index(i), PluginRegistry::IdRole).toString();
+        const PluginInfo* p = m_registry->find(id);
+        if (!p || p->category != QLatin1String("task") || !p->error.isEmpty()) continue;
+        // "requires": {"digital": {"models": ["PXIe-6571"]}} -> "instruments": {"digital": "<device>"}
+        QJsonObject instruments;
+        const QJsonObject req = p->manifest.value("requires").toObject();
+        for (auto r = req.begin(); r != req.end(); ++r) {
+            QJsonValue pick;                                // null: not found
+            const QJsonArray models = r.value().toObject().value("models").toArray();
+            for (Device* d : std::as_const(m_devices)) {
+                if (d->kind() != QLatin1String("instrument")) continue;
+                for (const auto& m : models)
+                    if (m.toString().compare(d->model(), Qt::CaseInsensitive) == 0 && pick.isNull()) pick = d->name();
+            }
+            instruments.insert(r.key(), pick);
+        }
+        QJsonObject cfg{{"kind", "task"}, {"resource", ""}, {"instruments", instruments},
+                        {"model", p->name}, {"simulate", m_discover == QLatin1String("sim")}};
+        addDevice(p->id, p->id, cfg);
+    }
+}
+
 bool Station::openDevice(Device* d)
 {
+    if (d->pluginId().isEmpty()) {
+        d->unsupported(QStringLiteral("检测到 %1，但没有对应的驱动插件").arg(d->model()));
+        return false;
+    }
     const PluginInfo* info = m_registry->find(d->pluginId());
     if (!info) {
         d->fail(QStringLiteral("插件 '%1' 未找到").arg(d->pluginId()));
         return false;
     }
     d->mergeDefaults(info->defaultConfig);
+    d->mergeDefaults(QJsonObject{{"plugin_dir", info->dir}});
     QString err;
     auto lib = m_registry->library(d->pluginId(), &err);
     if (!lib) {
@@ -80,13 +142,48 @@ bool Station::openDevice(Device* d)
         return false;
     }
     if (!d->open(lib)) return false;
-    emit deviceLog("info", d->name(), QStringLiteral("已连接 %1 @ %2").arg(d->pluginId(), d->resource()));
+    emit deviceLog("info", d->name(), d->kind() == QLatin1String("task")
+                                          ? QStringLiteral("测试任务 %1 已就绪").arg(info->name)
+                                          : QStringLiteral("已连接 %1 @ %2").arg(d->pluginId(), d->resource()));
     return true;
 }
 
 void Station::openAll()
 {
-    for (Device* d : m_devices) openDevice(d);
+    beginResetModel();
+    clearDevices();
+    m_discoverNote.clear();
+    // Hand-listed devices first: they keep their names and options.
+    for (const auto& v : std::as_const(m_manual)) {
+        QJsonObject cfg = v.toObject();
+        const QString name = cfg.value("name").toString();
+        const QString plugin = cfg.value("plugin").toString();
+        if (name.isEmpty() || plugin.isEmpty()) continue;
+        cfg.remove("name");
+        cfg.remove("plugin");
+        const PluginInfo* info = m_registry->find(plugin);
+        if (info && info->category == QLatin1String("task")) continue;   // tasks are created below
+        if (!cfg.contains("kind")) cfg.insert("kind", "instrument");
+        addDevice(name, plugin, cfg);
+    }
+    if (m_discover == QLatin1String("sim")) {
+        addInstruments(m_simInventory, true);
+        m_discoverNote = QStringLiteral("仿真机箱：%1 个仪器").arg(m_simInventory.size());
+    } else if (m_discover == QLatin1String("ni")) {
+        QString note;
+        const QJsonArray found = m_discoverer ? m_discoverer(&note) : QJsonArray();
+        if (!m_discoverer) note = QStringLiteral("没有可用的检测方法（需要嵌入式 Python）");
+        addInstruments(found, false);
+        m_discoverNote = note.isEmpty() ? QStringLiteral("检测到 %1 个仪器").arg(found.size()) : note;
+        emit deviceLog(found.isEmpty() ? "warning" : "info", "station", m_discoverNote);
+    }
+    addTasks();
+    endResetModel();
+    emit loaded();
+    for (Device* d : std::as_const(m_devices))
+        if (d->kind() != QLatin1String("task")) openDevice(d);
+    for (Device* d : std::as_const(m_devices))             // tasks after the instruments they use
+        if (d->kind() == QLatin1String("task")) openDevice(d);
 }
 
 void Station::closeAll()
@@ -116,6 +213,14 @@ void Station::clearDevices()
     for (Device* d : m_devices) d->close();
     qDeleteAll(m_devices);
     m_devices.clear();
+}
+
+int Station::instrumentCount() const
+{
+    int n = 0;
+    for (Device* d : m_devices)
+        if (d->kind() == QLatin1String("instrument")) ++n;
+    return n;
 }
 
 Device* Station::device(const QString& name) const
@@ -148,6 +253,8 @@ QVariant Station::data(const QModelIndex& index, int role) const
     case PluginRole:   return d->pluginId();
     case ResourceRole: return d->resource();
     case StatusRole:   return d->status();
+    case KindRole:     return d->kind();
+    case ModelRole:    return d->model();
     }
     return {};
 }
@@ -155,5 +262,5 @@ QVariant Station::data(const QModelIndex& index, int role) const
 QHash<int, QByteArray> Station::roleNames() const
 {
     return {{DeviceRole, "device"}, {NameRole, "name"}, {PluginRole, "pluginId"},
-            {ResourceRole, "resource"}, {StatusRole, "status"}};
+            {ResourceRole, "resource"}, {StatusRole, "status"}, {KindRole, "kind"}, {ModelRole, "instrumentModel"}};
 }

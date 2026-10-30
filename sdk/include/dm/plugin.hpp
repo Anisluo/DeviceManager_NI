@@ -55,11 +55,30 @@ public:
         emit_event(Json{{"type", "log"}, {"level", level}, {"message", msg}});
     }
 
+    // Call a method on another device of the station (needs a host that supports
+    // plugin_set_host). Throws PluginError with the device's error code and message.
+    Json host_call(const std::string& device, const std::string& method, const Json& args = Json::object()) {
+        if (!host_ || !host_->invoke)
+            throw PluginError(DM_E_STATE, "host does not offer device calls (plugin_set_host)");
+        std::string result;
+        const int rc = host_->invoke(host_->ctx, device.c_str(), method.c_str(), args.dump().c_str(),
+                                     [](const char* json, void* user) { *static_cast<std::string*>(user) = json ? json : ""; },
+                                     &result);
+        Json r = result.empty() ? Json::object() : Json::parse(result);
+        if (rc < 0) {
+            const std::string msg = r.is_object() && r.contains("error") ? r["error"].as_string() : std::string("call failed");
+            throw PluginError(rc, device + "." + method + ": " + msg);
+        }
+        return r;
+    }
+    bool has_host() const { return host_ && host_->invoke; }
+
     // ---- used by the generated C exports ----
     void set_callback(dm_event_cb cb, void* user) {
         std::lock_guard<std::mutex> lk(cb_mutex_);
         cb_ = cb; cb_user_ = user;
     }
+    void set_host(const dm_host_api* api) { host_ = api; }
 
     int invoke(const char* method, const char* args_json, char* out, int out_len) {
         std::string name = method ? method : "";
@@ -146,6 +165,7 @@ private:
     std::mutex cb_mutex_;
     dm_event_cb cb_ = nullptr;
     void* cb_user_ = nullptr;
+    const dm_host_api* host_ = nullptr;
 };
 
 } // namespace dm
@@ -168,5 +188,8 @@ private:
     PLUGIN_API void plugin_destroy(void* h) { delete static_cast<::dm::Plugin*>(h); }      \
     PLUGIN_API void plugin_set_callback(void* h, dm_event_cb cb, void* user) {             \
         if (h) static_cast<::dm::Plugin*>(h)->set_callback(cb, user);                      \
+    }                                                                                      \
+    PLUGIN_API void plugin_set_host(void* h, const dm_host_api* api) {                     \
+        if (h) static_cast<::dm::Plugin*>(h)->set_host(api);                               \
     }                                                                                      \
     }

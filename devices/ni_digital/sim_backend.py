@@ -2,6 +2,7 @@
 bursts, and SWD over patterns — wired to the virtual chip in sim_dut.py."""
 
 import os
+import time
 import random
 
 from sim_dut import SimChip
@@ -256,6 +257,48 @@ class SimBackend:
         cycles = 4096
         return {"pass": not any(fails.values()), "fail_count": {p: fails.get(p, 0) for p in pins},
                 "cycles": cycles, "time_s": cycles * self.period}
+
+    # ---- project patterns (used by test tasks through the host) ----
+    # The simulated instrument checks the files and keeps time; the task models the DUT.
+    def project_open(self, pinmap, specs, levels, timing):
+        for f in [pinmap] + list(specs or []) + list(levels or []) + list(timing or []):
+            if not os.path.exists(f):
+                raise FileNotFoundError(f)
+        self.proj = {"timing_applied": (timing or [None])[0], "specs": list(specs or [])}
+        self.run = None
+        return {"pinmap": pinmap, "timing": list(timing or [])}
+
+    def _proj(self):
+        if not getattr(self, "proj", None):
+            raise RuntimeError("no pattern project loaded (pattern_project first)")
+        return self.proj
+
+    def use_timing(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        self._proj()["timing_applied"] = path
+        return {"applied": path}
+
+    def set_specs(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        self._proj()["specs"] = [path]
+        return {"specs": path}
+
+    def burst_start(self, path, label, seconds):
+        self._proj()
+        if not os.path.exists(path):
+            raise FileNotFoundError(path)
+        self.run = {"t0": time.monotonic(), "seconds": max(0.0, float(seconds))}
+
+    def burst_done(self):
+        return self.run is None or time.monotonic() - self.run["t0"] >= self.run["seconds"]
+
+    def burst_result(self, pins):
+        return True, {}
+
+    def burst_abort(self):
+        self.run = None
 
     # ---- SWD over patterns (full-speed PHY) ----
     def swd_cycles(self, cycles, frequency):

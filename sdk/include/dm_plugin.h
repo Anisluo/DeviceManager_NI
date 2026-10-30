@@ -10,6 +10,7 @@
  *   manifest = plugin_manifest()             // static JSON, owned by plugin
  *   h        = plugin_create(config_json)    // one handle per device session
  *   plugin_set_callback(h, cb, user)         // optional async events
+ *   plugin_set_host(h, api)                  // optional: lets the plugin call other devices
  *   rc       = plugin_invoke(h, method, args_json, out, out_len)   // repeated
  *   plugin_destroy(h)
  *
@@ -59,6 +60,20 @@ extern "C" {
 
 typedef void (*dm_event_cb)(const char* evt_json, void* user);
 
+/* Receives a result string; the host calls it once before dm_host_api.invoke returns. */
+typedef void (*dm_sink_fn)(const char* json, void* sink_user);
+
+/* Services the host offers to a plugin instance (test tasks use it to drive instruments).
+ * invoke(): call `method` on the station device named `device`; same return codes as
+ * plugin_invoke, the result (or {"error":...}) is handed to sink. Calls are synchronous and
+ * run on the caller's thread; a device cannot call itself. */
+typedef struct dm_host_api {
+    int   size;            /* sizeof(dm_host_api), for future extension */
+    void* ctx;             /* pass back as the first argument */
+    int (*invoke)(void* ctx, const char* device, const char* method, const char* args_json,
+                  dm_sink_fn sink, void* sink_user);
+} dm_host_api;
+
 /* Function pointer types, used by hosts that resolve symbols dynamically. */
 typedef int         (*dm_abi_version_fn)(void);
 typedef const char* (*dm_manifest_fn)(void);
@@ -67,6 +82,7 @@ typedef int         (*dm_invoke_fn)(void* h, const char* method, const char* arg
                                     char* out_json, int out_len);
 typedef void        (*dm_destroy_fn)(void* h);
 typedef void        (*dm_set_callback_fn)(void* h, dm_event_cb cb, void* user);
+typedef void        (*dm_set_host_fn)(void* h, const dm_host_api* api);
 
 /* ABI version this plugin was built against (must equal DM_ABI_VERSION). */
 PLUGIN_API int         plugin_abi_version(void);
@@ -86,6 +102,9 @@ PLUGIN_API void        plugin_destroy(void* h);
 /* Register (or clear with cb == NULL) the async event callback.
  * Event JSON: {"type":"...", ...}; conventional types: "log", "data", "state". */
 PLUGIN_API void        plugin_set_callback(void* h, dm_event_cb cb, void* user);
+
+/* Optional. Hands the instance the host services; `api` stays valid until plugin_destroy. */
+PLUGIN_API void        plugin_set_host(void* h, const dm_host_api* api);
 
 #ifdef __cplusplus
 }

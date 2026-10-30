@@ -220,6 +220,32 @@ void PythonRuntime::log(const QString& level, const QString& source, const QStri
     if (d->logSink) d->logSink(level, source, message);
 }
 
+QString PythonRuntime::callJson(const QString& module, const QString& function, const QString& argsJson, QString* error)
+{
+    if (!isRunning()) {
+        if (error) *error = QStringLiteral("Python 运行时未启动");
+        return {};
+    }
+    QString failure, out;
+    {
+        py::gil_scoped_acquire gil;
+        try {
+            py::module_ json = py::module_::import("json");
+            py::object args = json.attr("loads")(argsJson.isEmpty() ? std::string("{}") : argsJson.toStdString());
+            py::object fn = py::module_::import(module.toStdString().c_str()).attr(function.toStdString().c_str());
+            py::object result = fn(**args);
+            out = QString::fromStdString(json.attr("dumps")(result, py::arg("ensure_ascii") = false).cast<std::string>());
+        } catch (const std::exception& e) {
+            failure = QString::fromUtf8(e.what());     // drop Python objects before leaving the GIL scope
+        }
+    }
+    if (!failure.isNull()) {
+        if (error) *error = failure;
+        return {};
+    }
+    return out;
+}
+
 std::shared_ptr<PluginModule> PythonRuntime::loadPlugin(const PluginInfo& info, QString* error)
 {
     if (!isRunning()) {

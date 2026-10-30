@@ -8,6 +8,7 @@ Rectangle {
     property string detail: ""
     property string status: ""          // shows a StatusDot when set
     property bool selected: false
+    property bool dimmed: false          // e.g. an instrument without a driver
     signal clicked()
 
     implicitHeight: 34
@@ -22,7 +23,7 @@ Rectangle {
         StatusDot { visible: item.status !== ""; status: item.status }
         Text {
             text: item.text
-            color: Theme.text
+            color: item.dimmed ? Theme.textFaint : Theme.text
             font.family: Theme.sans
             font.pixelSize: Theme.fontMd
             font.weight: item.selected ? Font.DemiBold : Font.Normal

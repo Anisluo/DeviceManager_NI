@@ -6,6 +6,9 @@
   "entry": "ni_digital:NiDigital",
   "abi": 1,
   "category": "instrument",
+  "models": [
+    "PXIe-6571"
+  ],
   "description": "PXIe-6571：电平/时序、静态 I/O、每引脚 PPMU、开短路与漏电、SWD（静态位翻转与图形两种物理层，内存/内核/寄存器访问）、图形加载与 burst、电平×时序 Shmoo。后端：NI-Digital 驱动（nimi-python）或带虚拟 Cortex-M0 的纯仿真。",
   "capabilities": [
     "digital.pattern",

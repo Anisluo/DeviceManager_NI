@@ -1,0 +1,9 @@
+{
+  "name": "8881 · 机箱检测",
+  "description": "真实 PXIe-1095 机箱：用 NI 系统配置（与 NI MAX 相同）检测板卡；需要 pip install nisyscfg。TDC测量 自动使用检测到的 PXIe-6571。",
+  "plugin_paths": [],
+  "default_page": "tdc_measure",
+  "data_dir": "../data",
+  "discover": "ni",
+  "devices": []
+}

@@ -86,17 +86,21 @@ Flickable {
                     required property string name
                     required property string pluginId
                     required property string resource
-                    width: 300
+                    required property string kind
+                    visible: kind === "instrument"
+                    width: visible ? 300 : 0
+                    height: visible ? implicitHeight : 0
                     title: name
-                    subtitle: pluginId + " @ " + resource
+                    subtitle: (devCard.model.instrumentModel || "") + (resource ? " · " + resource : "") + (pluginId ? "  ·  驱动 " + pluginId : "")
                     ColumnLayout {
                         width: parent.width
                         spacing: 10
                         RowLayout {
                             spacing: 8
-                            StatusDot { status: devCard.model.status }
+                            StatusDot { status: devCard.model.status || "" }
                             Text {
-                                text: devCard.model.status === "online" ? "在线" : devCard.model.status === "error" ? "错误" : "离线"
+                                text: devCard.model.status === "online" ? "在线" : devCard.model.status === "error" ? "错误"
+                                    : devCard.model.status === "nodriver" ? "无驱动" : "离线"
                                 color: Theme.textMuted
                                 font.family: Theme.sans
                                 font.pixelSize: Theme.fontSm
@@ -105,7 +109,7 @@ Flickable {
                         Text {
                             visible: devCard.device && devCard.device.lastError !== ""
                             text: devCard.device ? devCard.device.lastError : ""
-                            color: Theme.error
+                            color: devCard.model.status === "nodriver" ? Theme.textFaint : Theme.error
                             wrapMode: Text.Wrap
                             Layout.fillWidth: true
                             font.family: Theme.sans
@@ -113,8 +117,8 @@ Flickable {
                         }
                         RowLayout {
                             spacing: 8
-                            DmButton { text: "打开页面"; kind: "primary"; compact: true; onClicked: page.navigate("device", devCard.name) }
-                            DmButton { text: "重新连接"; compact: true; onClicked: App.station.reopen(devCard.name) }
+                            DmButton { text: "打开页面"; kind: "primary"; compact: true; visible: devCard.pluginId !== ""; onClicked: page.navigate("device", devCard.name) }
+                            DmButton { text: "重新连接"; compact: true; visible: devCard.pluginId !== ""; onClicked: App.station.reopen(devCard.name) }
                         }
                     }
                 }

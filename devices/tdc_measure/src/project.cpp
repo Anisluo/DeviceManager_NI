@@ -152,8 +152,21 @@ std::vector<LevelRow> load_levels(const std::string& path)
     return out;
 }
 
+std::string format_name(const std::string& format)
+{
+    if (format == "NR") return "NR 不归零";
+    if (format == "RL") return "RL 归零到低";
+    if (format == "RH") return "RH 归零到高";
+    if (format == "SBC") return "SBC 补码包围";
+    return format.empty() ? "\xE2\x80\x94" : format;
+}
+
 std::vector<std::pair<std::string, Timeset>> load_timing(const std::string& path)
 {
+    // drive format elements as the editor writes them (DriveReturnLow: sheets of plugin 0.2)
+    static const std::vector<std::pair<std::string, std::string>> formats{
+        {"DriveNonReturn", "NR"}, {"ReturnToLow", "RL"}, {"DriveReturnLow", "RL"}, {"ReturnToHigh", "RH"},
+        {"SurroundByComplement", "SBC"}};
     std::vector<std::pair<std::string, Timeset>> out;
     xml_parse(read_file(path)).walk([&out](const XmlNode& n) {
         if (n.tag != "TimeSet") return;
@@ -161,6 +174,23 @@ std::vector<std::pair<std::string, Timeset>> load_timing(const std::string& path
         ts.period_text = n.child_text("Period");
         double v = 0;
         if (parse_quantity(ts.period_text, v)) ts.period = v;
+        if (const XmlNode* list = n.child("PinEdges")) {
+            for (auto& pe : list->children) {
+                if (pe.tag != "PinEdge") continue;
+                PinEdge e;
+                e.pin = pe.attr("pin");
+                e.comment = pe.child_text("Comment");
+                for (auto& c : pe.children) {
+                    for (auto& [tag, fmt] : formats) {
+                        if (c.tag != tag) continue;
+                        e.format = fmt;
+                        for (auto& k : c.children) e.edges[k.tag] = k.text;
+                    }
+                    if (c.tag == "CompareStrobe") e.edges["Strobe"] = c.child_text("Strobe", "0");
+                }
+                ts.edges.push_back(std::move(e));
+            }
+        }
         out.emplace_back(n.attr("name"), ts);
     });
     return out;
@@ -302,8 +332,17 @@ std::string Pattern::patched_bytes() const
     return out;
 }
 
-RunResult Pattern::run(const std::map<std::string, double>& periods, double busy_delay, std::mt19937* rng,
-                       double record_limit, long max_steps) const
+std::vector<std::string> Pattern::used_timesets() const
+{
+    std::vector<std::string> out;
+    for (size_t i = 0; i < base_ins.size(); ++i) {
+        const std::string ts = timeset_of(i);
+        if (std::find(out.begin(), out.end(), ts) == out.end()) out.push_back(ts);
+    }
+    return out;
+}
+
+RunResult Pattern::run(const TimingModel& tm, double busy_delay, std::mt19937* rng, double record_limit, long max_steps) const
 {
     RunResult r;
     const std::vector<uint32_t> in = ins();
@@ -317,9 +356,9 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
         const Decoded d = decode(v);
         dec.push_back(d);
         const std::string ts = d.timeset < timesets.size() ? timesets[d.timeset] : "ts" + std::to_string(d.timeset);
-        auto it = periods.find(ts);
-        if (it == periods.end() || it->second <= 0) { unknown.insert(ts); per.push_back(1e-6); }
-        else per.push_back(it->second);
+        auto it = tm.find(ts);
+        if (it == tm.end() || it->second.period <= 0) { unknown.insert(ts); per.push_back(1e-6); }
+        else per.push_back(it->second.period);
     }
     std::map<std::pair<size_t, size_t>, bool> edge_cache, program_cache;
     auto drive_edge = [&](size_t a, size_t b) {
@@ -363,12 +402,16 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
         const std::string& st = states[pc];
         const bool changed = prev_pc < 0 || states[size_t(prev_pc)] != st;
         if (prev_pc >= 0 && changed && drive_edge(size_t(prev_pc), pc)) last_drive_edge = t;
-        if (recording && changed) r.timeline.emplace_back(t, st);
         prev_pc = long(pc);
+        const size_t here = pc;
+        const double t0 = t;
+        const bool rec = recording;
+        long cycles = 1;
 
         switch (d.op) {
         case 1:                                                   // repeat
-            t += period * std::max(1u, d.operand);
+            cycles = long(std::max(1u, d.operand));
+            t += period * double(cycles);
             ++pc;
             break;
         case 4:                                                   // set_loop
@@ -394,10 +437,7 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
                 r.outer_iteration = t - top.t_iter;
                 r.outer_loops = int(top.count);
                 r.outer_set_loop = int(top.pc);
-                if (recording) {
-                    recording = false;
-                    r.timeline.emplace_back(t, st);
-                }
+                recording = false;
             }
             top.first = false;
             if (remaining > 1 && !recording) {
@@ -421,9 +461,9 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
             const bool high = st.find('H') != std::string::npos, low = st.find('L') != std::string::npos;
             if (target == long(pc) && high) {
                 if (std::isnan(ready_at)) ready_at = last_drive_edge + delay();
-                const double cycles = std::max(1.0, std::ceil(std::max(0.0, ready_at - t) / period));
-                if (recording) r.waits.emplace_back(t, cycles * period);
-                t += cycles * period;
+                cycles = long(std::max(1.0, std::ceil(std::max(0.0, ready_at - t) / period)));
+                if (recording) r.waits.emplace_back(t, double(cycles) * period);
+                t += double(cycles) * period;
                 ready_at = NaN;
             } else {
                 if (target != long(pc)) notes.insert("v" + std::to_string(pc) + ": jump_if 到其他标签，仿真按条件不成立处理");
@@ -442,14 +482,13 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
             t += period;
             ++pc;
         }
-        if (recording && (t > record_limit || r.timeline.size() > 20000)) {
-            recording = false;
-            r.timeline.emplace_back(t, st);
+        if (rec) {
+            r.segs.push_back(RunResult::Seg{t0, here, cycles, period});
+            r.record_end = t0 + double(cycles) * period;
         }
+        if (recording && (t > record_limit || r.segs.size() > 20000)) recording = false;
     }
     for (auto& ts : unknown) notes.insert("未知时序 " + ts + "，按 1 µs 计");
-    if (recording || r.timeline.empty())
-        r.timeline.emplace_back(t, prev_pc >= 0 ? states[size_t(prev_pc)] : std::string());
     r.total = t;
     r.notes.assign(notes.begin(), notes.end());
     return r;
@@ -458,29 +497,6 @@ RunResult Pattern::run(const std::map<std::string, double>& periods, double busy
 // =========================================================================== analysis
 
 namespace {
-
-struct Edges { std::vector<double> rises, falls; };
-
-Edges pulses(const std::vector<std::pair<double, std::string>>& tl, size_t k)
-{
-    Edges e;
-    char prev = 0;
-    for (auto& [t, s] : tl) {
-        const char c = k < s.size() ? s[k] : 0;
-        if (prev == '0' && c == '1') e.rises.push_back(t);
-        else if (prev == '1' && c == '0') e.falls.push_back(t);
-        if (c == '0' || c == '1') prev = c;
-    }
-    return e;
-}
-
-std::string gen_role(const std::string& role)
-{
-    if (role == "TRIG") return "BUSY";
-    if (role == "OUT1") return "START";
-    if (role == "OUT2") return "HIT";
-    return role;
-}
 
 double level_of(char c)
 {
@@ -491,29 +507,113 @@ double level_of(char c)
     }
 }
 
+// A drive state that the format turns into a pulse in every cycle.
+bool pulsed(const std::string& format, char c)
+{
+    return (format == "RL" && c == '1') || (format == "RH" && c == '0') || (format == "SBC" && (c == '0' || c == '1'));
+}
+
+const EdgeTimes& edge_of(const TimingModel& tm, const std::string& ts, const std::string& pin)
+{
+    static const EdgeTimes nr;
+    auto it = tm.find(ts);
+    if (it == tm.end()) return nr;
+    auto jt = it->second.pins.find(pin);
+    return jt == it->second.pins.end() ? nr : jt->second;
+}
+
+// Physical waveform of one pin over the recorded vectors: driven edges for the analysis (every
+// pulse, capped) and (t, level) points for the scope. Pins pulsing too densely to draw one by
+// one (a clock in RL) are drawn at their state level.
+struct Wave {
+    std::vector<double> rises, falls;
+    std::vector<std::pair<double, double>> draw;
+    bool dense = false;
+    std::string format;                    // pulsed drive format seen on this pin
+};
+
+Wave wave_of(const Pattern& p, const RunResult& r, size_t k, const TimingModel& tm)
+{
+    constexpr size_t MAX_EDGES = 200000, MAX_DRAWN = 2000;
+    Wave w;
+    auto state = [&p, k](size_t v) { return k < p.states[v].size() ? p.states[v][k] : 'X'; };
+    size_t pulses = 0;
+    for (auto& s : r.segs)
+        if (pulsed(edge_of(tm, p.timeset_of(s.v), p.pins[k]).format, state(s.v))) pulses += size_t(s.cycles);
+    w.dense = pulses > MAX_DRAWN;
+    char driven = 0;
+    double drawn = NaN;
+    auto draw = [&](double t, double v) {
+        if (v != drawn) { w.draw.emplace_back(t, v); drawn = v; }
+    };
+    auto drive = [&](double t, char c, bool show) {
+        if (driven == '0' && c == '1') { if (w.rises.size() < MAX_EDGES) w.rises.push_back(t); }
+        else if (driven == '1' && c == '0') { if (w.falls.size() < MAX_EDGES) w.falls.push_back(t); }
+        driven = c;
+        if (show) draw(t, c == '1' ? 1.0 : 0.0);
+    };
+    for (auto& s : r.segs) {
+        const char c = state(s.v);
+        const EdgeTimes& e = edge_of(tm, p.timeset_of(s.v), p.pins[k]);
+        const double P = s.period;
+        const double on = std::isfinite(e.on) ? e.on : 0.0, data = std::isfinite(e.data) ? e.data : 0.0;
+        const double ret = std::isfinite(e.ret) ? e.ret : P;
+        if (c != '0' && c != '1') {                         // compare or not driven
+            draw(s.t, level_of(c));
+            continue;
+        }
+        if (!pulsed(e.format, c)) {
+            drive(s.t + data, c, true);
+            continue;
+        }
+        if (w.format.empty()) w.format = e.format;
+        const char comp = c == '1' ? '0' : '1';
+        const char base = e.format == "RL" ? '0' : e.format == "RH" ? '1' : comp;
+        if (w.dense) draw(s.t, c == '1' ? 1.0 : 0.0);
+        for (long i = 0; i < s.cycles; ++i) {
+            if (w.dense && w.rises.size() >= MAX_EDGES && w.falls.size() >= MAX_EDGES) break;
+            const double c0 = s.t + double(i) * P;
+            if (e.format == "SBC") drive(c0 + on, comp, !w.dense);
+            drive(c0 + data, c, !w.dense);
+            drive(c0 + ret, base, !w.dense);
+        }
+    }
+    return w;
+}
+
+std::string gen_role(const std::string& role)
+{
+    if (role == "TRIG") return "BUSY";
+    if (role == "OUT1") return "START";
+    if (role == "OUT2") return "HIT";
+    return role;
+}
+
 dm::Json num(double v) { return std::isfinite(v) ? dm::Json(v) : dm::Json(); }
 
 } // namespace
 
-dm::Json analyze(const Pattern& p, const std::map<std::string, double>& periods, double busy_delay)
+dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
 {
-    const RunResult r = p.run(periods, busy_delay);
-    const auto& tl = r.timeline;
+    const RunResult r = p.run(tm, busy_delay);
     std::vector<std::pair<std::string, std::string>> roles;     // pin -> role, pin order
     auto role_of = [&roles](const std::string& pin) -> std::string {
         for (auto& [p2, r2] : roles) if (p2 == pin) return r2;
         return "";
     };
-    std::map<std::string, Edges> edges;
+    std::map<std::string, Wave> edges;
     std::map<std::string, std::string> given;
     if (p.meta.is_object())
         for (auto& [role, pin] : p.meta["roles"].members())
             if (pin.is_string() && !pin.as_string().empty()) given[pin.as_string()] = role;
     for (size_t k = 0; k < p.pins.size(); ++k) {
-        edges[p.pins[k]] = pulses(tl, k);
+        edges[p.pins[k]] = wave_of(p, r, k, tm);
         if (!given.empty()) continue;
         bool compared = false;
-        for (auto& [t, s] : tl) if (k < s.size() && (s[k] == 'H' || s[k] == 'L')) { compared = true; break; }
+        for (auto& s : r.segs) {
+            const char c = k < p.states[s.v].size() ? p.states[s.v][k] : 'X';
+            if (c == 'H' || c == 'L') { compared = true; break; }
+        }
         if (compared) roles.emplace_back(p.pins[k], "BUSY");
     }
     if (!given.empty()) {
@@ -606,34 +706,52 @@ dm::Json analyze(const Pattern& p, const std::map<std::string, double>& periods,
                                   {"t", e.t}, {"rel", num(e.rel)}, {"width", num(e.width)}});
     out["events"] = events;
 
-    // timeline: stacked digital traces {t: [ms], channels: [{name, unit, data}]}
+    // timeline: stacked digital traces {t: [ms], channels: [{name, unit, data}]}, every pin
+    // sampled before and after each change of any pin
     double resolution = NaN;
-    for (size_t i = 0; i < p.base_ins.size(); ++i) {
-        auto it = periods.find(p.timeset_of(i));
-        if (it != periods.end() && it->second > 0 && !(resolution <= it->second)) resolution = it->second;
+    for (auto& name : p.used_timesets()) {
+        auto it = tm.find(name);
+        if (it != tm.end() && it->second.period > 0 && !(resolution <= it->second.period)) resolution = it->second.period;
     }
     double clock = NaN;
     if (p.meta.is_object() && p.meta["summary"].contains("clock_mhz")) clock = p.meta["summary"]["clock_mhz"].as_number();
     const size_t np = p.pins.size();
     std::vector<dm::Json> chans(np, dm::Json::array());
     dm::Json ts = dm::Json::array();
-    const std::string* prev = nullptr;
-    auto push = [&](double t, const std::string& s) {
-        ts.push_back(t * 1e3);
-        for (size_t k = 0; k < np; ++k)
-            chans[k].push_back(level_of(k < s.size() ? s[k] : 'X') * 0.8 + 1.2 * double(np - 1 - k));
-    };
-    for (auto& [t, s] : tl) {
-        if (prev) push(t, *prev);
-        push(t, s);
-        prev = &s;
+    std::vector<double> cur(np, 0.5);
+    struct Change { double t; size_t k; double v; };
+    std::vector<Change> changes;
+    for (size_t k = 0; k < np; ++k) {
+        const auto& d = edges[p.pins[k]].draw;
+        if (!d.empty()) cur[k] = d.front().second;
+        for (auto& [t, v] : d) changes.push_back(Change{t, k, v});
     }
+    std::stable_sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) { return a.t < b.t; });
+    auto push = [&](double t) {
+        ts.push_back(t * 1e3);
+        for (size_t k = 0; k < np; ++k) chans[k].push_back(cur[k] * 0.8 + 1.2 * double(np - 1 - k));
+    };
+    constexpr size_t MAX_POINTS = 60000;
+    push(0.0);
+    double t_last = 0.0;
+    for (size_t i = 0; i < changes.size();) {
+        const double t = changes[i].t;
+        if (ts.size() + 2 > MAX_POINTS) break;
+        push(t);
+        for (; i < changes.size() && changes[i].t == t; ++i) cur[changes[i].k] = changes[i].v;
+        push(t);
+        t_last = t;
+    }
+    push(std::max(r.record_end, t_last));
     dm::Json channels = dm::Json::array();
     for (size_t k = 0; k < np; ++k) {
         const std::string role = role_of(p.pins[k]);
-        std::string name = p.pins[k];
-        if (role == "CLK" && std::isfinite(clock)) name += " (CLK " + fmt_g(clock, 6) + " MHz)";
-        else if (!role.empty()) name += " (" + role + ")";
+        const Wave& w = edges[p.pins[k]];
+        std::string name = p.pins[k], tags;
+        if (role == "CLK" && std::isfinite(clock)) tags = "CLK " + fmt_g(clock, 6) + " MHz";
+        else if (!role.empty()) tags = role;
+        if (!w.format.empty()) tags += (tags.empty() ? "" : ", ") + w.format + (w.dense ? " 每周期一个脉冲，未逐个画出" : "");
+        if (!tags.empty()) name += " (" + tags + ")";
         channels.push_back(dm::Json{{"name", name}, {"unit", ""}, {"data", chans[k]}});
     }
     out["timeline"] = dm::Json{{"t", ts}, {"dt_ms", std::isfinite(resolution) ? resolution * 1e3 : 0.0}, {"channels", channels}};
@@ -709,10 +827,102 @@ std::shared_ptr<Pattern> Project::find(const std::string& name) const
     return nullptr;
 }
 
+std::vector<std::string> Project::expand(const std::string& name) const
+{
+    for (auto& [g, pins] : pinmap.groups) if (g == name) return pins;
+    return {name};
+}
+
+TimingModel Project::model(const std::map<std::string, double>& sym) const
+{
+    TimingModel tm;
+    auto eval = [&sym](const std::string& text, double& v) {
+        if (text.empty()) return false;
+        if (parse_quantity(text, v)) return true;
+        try {
+            v = evaluate(text, sym);
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    };
+    for (auto& [name, ts] : timing) {
+        TimesetModel m;
+        auto sh = timing_file.find(name);
+        if (sh != timing_file.end()) m.sheet = sh->second;
+        double period = 0;
+        if (eval(ts.period_text, period) && period > 0) m.period = period;
+        else m.problems.emplace_back("", "周期 '" + ts.period_text + "' 无法求值");
+        // group entries first, so an entry for the pin itself wins
+        for (int pass = 0; pass < 2; ++pass) {
+            for (auto& pe : ts.edges) {
+                const std::vector<std::string> pins = expand(pe.pin);
+                const bool group = pins.size() != 1 || pins[0] != pe.pin;
+                if (group != (pass == 0)) continue;
+                EdgeTimes e;
+                e.defined = true;
+                if (!pe.format.empty()) e.format = pe.format;
+                std::string bad;
+                for (auto& [key, text] : pe.edges) {
+                    double v = 0;
+                    if (!eval(text, v)) { bad += (bad.empty() ? "" : "、") + key + " '" + text + "'"; continue; }
+                    if (key == "On") e.on = v;
+                    else if (key == "Data") e.data = v;
+                    else if (key == "Return") e.ret = v;
+                    else if (key == "Off") e.off = v;
+                    else if (key == "Strobe") e.strobe = v;
+                }
+                if (!bad.empty()) m.problems.emplace_back(pe.pin, bad + " 无法求值");
+                if (e.format != "NR" && !(std::isfinite(e.ret) && e.ret > e.data))
+                    m.problems.emplace_back(pe.pin, e.format + " 的 Return 应晚于 Data");
+                if (m.period > 0) {
+                    const double latest = std::max({e.on, e.data, std::isfinite(e.ret) ? e.ret : 0.0, e.off});
+                    if (latest > m.period * (1 + 1e-9)) m.problems.emplace_back(pe.pin, "驱动边沿 " + fmt_time(latest) + " 超出周期 " + fmt_time(m.period));
+                    if (e.strobe > m.period * (1 + 1e-9)) m.problems.emplace_back(pe.pin, "比较 Strobe " + fmt_time(e.strobe) + " 超出周期");
+                }
+                for (auto& pin : pins) m.pins[pin] = e;
+            }
+        }
+        tm[name] = std::move(m);
+    }
+    return tm;
+}
+
+TimingModel Project::model() const { return model(spec_symbols(specs)); }
+
 std::map<std::string, double> Project::periods() const
 {
     std::map<std::string, double> out;
-    for (auto& [name, ts] : timing) if (ts.period > 0) out[name] = ts.period;
+    for (auto& [name, m] : model()) if (m.period > 0) out[name] = m.period;
+    return out;
+}
+
+std::vector<std::string> check(const Pattern& p, const Project& pr, const TimingModel& tm)
+{
+    std::vector<std::string> out;
+    std::set<std::string> leveled;
+    for (auto& lv : pr.levels)
+        for (auto& pin : pr.expand(lv.pin)) leveled.insert(pin);
+    const auto& pm = pr.pinmap;
+    for (auto& pin : p.pins) {
+        if (std::find(pm.pins.begin(), pm.pins.end(), pin) == pm.pins.end()) out.push_back("引脚 " + pin + " 不在引脚映射里");
+        else if (!pm.connections.count(pin)) out.push_back("引脚 " + pin + " 没有连接到仪器通道");
+        if (!pr.levels_path.empty() && !leveled.count(pin))
+            out.push_back("引脚 " + pin + " 在电平表 " + stem(pr.levels_path) + " 里没有电平，运行时沿用仪器当前电平");
+    }
+    for (auto& name : p.used_timesets()) {
+        auto it = tm.find(name);
+        if (it == tm.end()) continue;                       // run() already notes unknown timesets
+        std::string missing;
+        for (auto& pin : p.pins)
+            if (!it->second.pins.count(pin)) missing += (missing.empty() ? "" : "、") + pin;
+        if (!missing.empty()) out.push_back("时序集 " + name + " 没有定义 " + missing + " 的边沿");
+        for (auto& [pin, msg] : it->second.problems) {
+            bool used = pin.empty();
+            for (auto& x : pr.expand(pin)) used = used || std::find(p.pins.begin(), p.pins.end(), x) != p.pins.end();
+            if (used) out.push_back("时序集 " + name + (pin.empty() ? "" : " " + pin) + "：" + msg);
+        }
+    }
     return out;
 }
 

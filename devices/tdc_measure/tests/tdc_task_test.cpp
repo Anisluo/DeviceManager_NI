@@ -120,6 +120,15 @@ int main(int argc, char** argv)
     const fs::path tmp = fs::temp_directory_path() / ("tdc_task_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     fs::create_directories(tmp);
     fs::copy(src / "project" / "DemoPrj-TDC", tmp / "P", fs::copy_options::recursive);
+    {
+        // a period written as a formula over the specifications (timeset "signal", the first one)
+        const fs::path sheet = tmp / "P" / "Timing" / "TDC.digitiming";
+        std::string x = read(sheet);
+        const std::string from = "<Period>1 \xC2\xB5s</Period>";
+        const size_t at = x.find(from);
+        if (at != std::string::npos) x.replace(at, from.size(), "<Period>Time.period*2</Period>");
+        std::ofstream(sheet, std::ios::binary) << x;
+    }
     const Json cfg{{"plugin_dir", src.u8string()}, {"simulate", true}, {"instruments", kv("digital", "dig1")},
                    {"options", Json{{"project", (tmp / "P").u8string()}, {"work_dir", (tmp / "w").u8string()}, {"pattern", "TDC_M20_2"}}}};
     handle = create(cfg.dump().c_str());
@@ -164,6 +173,51 @@ int main(int argc, char** argv)
     CHECK(call("summary").str("notes_text").find("v15") != std::string::npos, "Mode3 label warning");
     call("select", kv("name", "TDC_1018"));
     CHECK(call("vectors")["rows"][size_t(3)].str("states") == "1", "single pin low nibble");
+
+    std::printf("timing sheet: drive formats, edges, checks\n");
+    {
+        const Json edges = call("timeset_edges");
+        CHECK(edges["rows"].size() == 15, "pin edges %zu", edges["rows"].size());
+        bool rl = false, formula = false;
+        for (auto& r : edges["rows"].items()) {
+            if (r.str("timeset") == "pulse_2us" && r.str("pin") == "I1")
+                rl = r.str("format").rfind("RL", 0) == 0 && r.str("data") == "1 \xC2\xB5s" && r.str("return") == "2 \xC2\xB5s";
+            if (r.str("timeset") == "signal") formula = r.str("period") == "4.444 \xC2\xB5s";   // Time.period = 2.222 µs
+        }
+        CHECK(rl, "pulse_2us I1 is RL 1..2 us");
+        CHECK(formula, "period formula Time.period*2");
+        call("set_spec", Json{{"name", "Time.period"}, {"value", 3}});
+        formula = false;
+        const Json edges2 = call("timeset_edges");
+        for (auto& r : edges2["rows"].items())
+            if (r.str("timeset") == "signal") formula = r.str("period") == "6 \xC2\xB5s";
+        CHECK(formula, "period follows the spec");
+        call("set_spec", Json{{"name", "Time.period"}, {"value", 2.222}});      // back to the file's value
+
+        // RL: a repeated 1 is one pulse per cycle (TDC_1017: I1 in pulse_2us, 1 + 500 + 1 vectors)
+        call("select", kv("name", "TDC_1017"));
+        s = call("summary");
+        CHECK(s.str("hit_pin") == "I1" && s.integer("hit_count", 0) >= 502 && s.integer("hit_count", 0) % 502 == 0,
+              "RL pulses %s %d", s.str("hit_pin").c_str(), s.integer("hit_count", 0));
+        CHECK(close_to(s.number("hit_width", 0), 1e-6, 1e-12), "RL width %g", s.number("hit_width", 0));
+        const Json tl1017 = call("timeline");
+        CHECK(std::as_const(tl1017)["channels"][size_t(1)].str("name").find("RL") != std::string::npos, "RL in trace name");
+        const Json pe = call("timeset_edges", kv("pattern", true));
+        CHECK(pe["rows"].size() == 3, "edges of the current pattern %zu", pe["rows"].size());
+
+        call("select", kv("name", "TDC_2_T"));
+        bool missing = false;
+        const Json ck = call("checks");
+        for (auto& r : ck["rows"].items()) missing = missing || r.str("item").find("working") != std::string::npos;
+        CHECK(missing, "timeset working does not define I2: %s", ck.dump().c_str());
+        call("select", kv("name", "TDC"));
+        bool nolevel = false;
+        const Json ck2 = call("checks");
+        for (auto& r : ck2["rows"].items()) nolevel = nolevel || r.str("item").find("start") != std::string::npos;
+        CHECK(nolevel, "pin start has no levels: %s", ck2.dump().c_str());
+        call("select", kv("name", "TDC_M20_2"));
+        CHECK(call("checks").integer("count", -1) == 0, "TDC_M20_2 clean: %s", call("checks").dump().c_str());
+    }
     const auto t0 = Clock::now();
     const Json res1 = call("list_patterns");
     for (auto& p : res1["patterns"].items()) { call("select", kv("name", p.str("value"))); call("summary"); }
@@ -279,7 +333,8 @@ int main(int argc, char** argv)
     }
     CHECK(wait_ok && clock_ok, "wait loop / clock");
     const fs::path sheet = tmp / "w" / "gen" / "tdcgen_10000ps_I3_I0.digitiming";
-    CHECK(fs::exists(sheet) && read(sheet).find("<DriveReturnLow>") != std::string::npos, "RL timing sheet");
+    CHECK(fs::exists(sheet) && read(sheet).find("<ReturnToLow>") != std::string::npos &&
+          read(sheet).find("DriveReturnLow") == std::string::npos, "RL timing sheet in the editor's format");
     call("generate", kv("name", "TDC_M20_2"), &rc);
     CHECK(rc == DM_E_BAD_ARGS, "name clash refused");
     call("generate", Json{{"name", "GEN_B"}, {"clk_pin", "I0"}}, &rc);

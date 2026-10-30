@@ -1,7 +1,7 @@
 {
   "id": "tdc_measure",
   "name": "TDC测量",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "cpp",
   "entry": "tdc_measure",
   "abi": 1,

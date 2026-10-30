@@ -52,6 +52,24 @@
    "id": "pins",
    "method": "pins",
    "interval_ms": 3000
+  },
+  {
+   "id": "edges",
+   "method": "timeset_edges",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pedges",
+   "method": "timeset_edges",
+   "args": {
+    "pattern": true
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "chk",
+   "method": "checks",
+   "interval_ms": 2000
   }
  ],
  "tabs": [
@@ -907,11 +925,30 @@
     },
     {
      "title": "检查",
+     "subtitle": "引脚映射、电平、时序集是否覆盖图形的每个引脚，边沿是否在周期内",
      "span": 4,
      "widgets": [
       {
        "type": "readout",
-       "label": "提示",
+       "label": "工程检查",
+       "source": "chk",
+       "field": "text",
+       "digits": 5
+      },
+      {
+       "type": "table",
+       "source": "chk",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "item",
+         "label": "问题"
+        }
+       ]
+      },
+      {
+       "type": "readout",
+       "label": "全部提示",
        "source": "sum",
        "field": "notes_text",
        "digits": 5
@@ -1095,6 +1132,52 @@
        ]
       }
      ]
+    },
+    {
+     "title": "本图形用到的时序边沿",
+     "subtitle": "RL：状态 1 在 Data 拉高、Return 回低，repeat 里每个周期一个脉冲；RH 相反；NR 在 Data 处变电平",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pedges",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "timeset",
+         "label": "时序集"
+        },
+        {
+         "field": "period",
+         "label": "周期"
+        },
+        {
+         "field": "pin",
+         "label": "引脚 / 组"
+        },
+        {
+         "field": "format",
+         "label": "驱动格式"
+        },
+        {
+         "field": "data",
+         "label": "Data"
+        },
+        {
+         "field": "return",
+         "label": "Return"
+        },
+        {
+         "field": "strobe",
+         "label": "Strobe"
+        },
+        {
+         "field": "note",
+         "label": "备注"
+        }
+       ]
+      }
+     ]
     }
    ]
   },
@@ -1137,6 +1220,64 @@
         {
          "field": "patterns",
          "label": "图形"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "时序集引脚边沿",
+     "subtitle": "同 Digital Pattern Editor 时序表：每个引脚 / 引脚组的驱动格式和周期内边沿（公式按当前规格求值）",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "edges",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "timeset",
+         "label": "时序集"
+        },
+        {
+         "field": "period",
+         "label": "周期"
+        },
+        {
+         "field": "pin",
+         "label": "引脚 / 组"
+        },
+        {
+         "field": "format",
+         "label": "驱动格式"
+        },
+        {
+         "field": "on",
+         "label": "On"
+        },
+        {
+         "field": "data",
+         "label": "Data"
+        },
+        {
+         "field": "return",
+         "label": "Return"
+        },
+        {
+         "field": "off",
+         "label": "Off"
+        },
+        {
+         "field": "strobe",
+         "label": "Strobe"
+        },
+        {
+         "field": "note",
+         "label": "备注"
+        },
+        {
+         "field": "sheet",
+         "label": "时序表"
         }
        ]
       }

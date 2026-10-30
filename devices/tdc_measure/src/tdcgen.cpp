@@ -267,9 +267,9 @@ std::string gen_timing_sheet(const GenPlan& pl, const std::vector<std::string>& 
                     "        <Period>" + fmt_s(T) + "</Period>\n        <PinEdges>\n";
     for (auto& pin : all_pins) {
         x += "          <PinEdge pin=\"" + xml_escape(pin) + "\">\n";
-        if (pin == pl.clk)
-            x += "            <DriveReturnLow>\n              <On>0</On>\n              <Data>0</Data>\n"
-                 "              <Return>" + fmt_s(T / 2) + "</Return>\n              <Off>0</Off>\n            </DriveReturnLow>\n";
+        if (pin == pl.clk)                                 // element and edge order as the editor saves RL
+            x += "            <ReturnToLow>\n              <On>0</On>\n              <Data>0</Data>\n"
+                 "              <Return>" + fmt_s(T / 2) + "</Return>\n              <Off>0</Off>\n            </ReturnToLow>\n";
         else
             x += "            <DriveNonReturn>\n              <On>0</On>\n              <Data>0</Data>\n"
                  "              <Off>0</Off>\n            </DriveNonReturn>\n";

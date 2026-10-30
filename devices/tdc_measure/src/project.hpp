@@ -11,6 +11,11 @@
 //   Instruction: bits 31..28 opcode (0 next, 1 repeat, 4 set_loop, 5 end_loop, 7 jump_if, F halt),
 //                bits 27..23 timeset index, bits 22..16 flags, bits 15..0 operand (count or label
 //                index; bit 15 of a jump_if operand is a flag).
+//
+// Timing follows the editor's timing sheet: each timeset gives every pin (or pin group) a drive
+// format and edges within the cycle. NR changes level at Data; RL drives a 1 as a pulse from Data
+// to Return (so a repeated 1 is one pulse per cycle); RH is the mirror for 0; SBC drives the
+// complement around the Data..Return window.
 #pragma once
 
 #include "tdms.hpp"
@@ -18,6 +23,7 @@
 #include <dm/json.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <random>
@@ -35,10 +41,36 @@ struct Decoded {
 Decoded decode(uint32_t ins);
 std::string op_name(unsigned op);
 
+// One <PinEdge> of a timing sheet, as written.
+struct PinEdge {
+    std::string pin;                       // pin or pin group
+    std::string format;                    // NR, RL, RH, SBC; "" when the entry has no drive edges
+    std::map<std::string, std::string> edges;   // On, Data, Return, Off, Strobe -> text
+    std::string comment;
+};
+
 struct Timeset {
     std::string period_text;
     double period = 0;                     // 0 when the period could not be parsed
+    std::vector<PinEdge> edges;
 };
+
+// Edge times of one pin in one timeset, evaluated against the specifications [s from cycle start].
+struct EdgeTimes {
+    std::string format = "NR";
+    double on = 0, data = 0, ret = std::numeric_limits<double>::quiet_NaN(), off = 0, strobe = 0;
+    bool defined = false;                  // the timeset has an entry for this pin or one of its groups
+};
+
+struct TimesetModel {
+    double period = 0;                     // 0 when the period could not be evaluated
+    std::string sheet;                     // .digitiming defining it
+    std::map<std::string, EdgeTimes> pins;
+    std::vector<std::pair<std::string, std::string>> problems;   // (pin, message)
+};
+using TimingModel = std::map<std::string, TimesetModel>;
+
+std::string format_name(const std::string& format);   // "RL" -> "RL 归零到低"
 
 struct Spec {
     std::string section, symbol, definition, comment;
@@ -71,8 +103,10 @@ std::vector<LevelRow> load_levels(const std::string& path);
 std::vector<std::pair<std::string, Timeset>> load_timing(const std::string& path);
 
 struct RunResult {
+    struct Seg { double t; size_t v; long cycles; double period; };
     double total = 0;
-    std::vector<std::pair<double, std::string>> timeline;   // (t, states) at each change
+    std::vector<Seg> segs;                                   // executed vectors of the recorded part
+    double record_end = 0;                                   // end of the recorded part
     std::vector<std::pair<double, double>> waits;            // (t, duration) of busy waits
     double outer_iteration = -1;                             // < 0: no outer program loop
     int outer_loops = 0;
@@ -107,13 +141,20 @@ public:
     // Returns (applied value, clamped?). Throws std::invalid_argument for vectors without a count.
     std::pair<int, bool> set_count(size_t i, long long value);
     std::string patched_bytes() const;
-    RunResult run(const std::map<std::string, double>& periods, double busy_delay, std::mt19937* rng = nullptr,
+    std::vector<std::string> used_timesets() const;          // referenced by instructions
+    RunResult run(const TimingModel& tm, double busy_delay, std::mt19937* rng = nullptr,
                   double record_limit = 20e-3, long max_steps = 400000) const;
 };
 
 // TDC timing of a pattern: pin roles, START / HIT timing, loops, run time, events and the
-// timeline in the scope widget format. Missing values are NaN (JSON null).
-dm::Json analyze(const Pattern& p, const std::map<std::string, double>& periods, double busy_delay);
+// timeline in the scope widget format. Edges follow the drive formats of the timing model.
+// Missing values are NaN (JSON null).
+dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay);
+
+class Project;
+// What the editor would flag before running: pins outside the pin map or without a channel,
+// pins without levels, timesets that do not define a pattern pin, edges outside the cycle.
+std::vector<std::string> check(const Pattern& p, const Project& pr, const TimingModel& tm);
 
 class Project {
 public:
@@ -130,6 +171,10 @@ public:
 
     void rescan();
     std::shared_ptr<Pattern> find(const std::string& name) const;
+    std::vector<std::string> expand(const std::string& pin_or_group) const;
+    // Every timeset with periods and edges evaluated against `symbols` (spec_symbols()).
+    TimingModel model(const std::map<std::string, double>& symbols) const;
+    TimingModel model() const;                               // against the project's specifications
     std::map<std::string, double> periods() const;
     std::vector<std::string> timing_files() const;           // every .digitiming, project first
 };

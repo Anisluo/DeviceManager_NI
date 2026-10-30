@@ -1,7 +1,8 @@
 // tdcgen.hpp — four-pin TDC stimulus generator, written straight to a compiled .digipat.
 //
-//   CLK   continuous clock: drive format return-to-low, state 1 in every vector, so it pulses
-//         once per cycle (also inside repeats) at the timeset period = 1 / clock frequency
+//   CLK   continuous clock: drive format return-to-low (<ReturnToLow>, as the editor writes it),
+//         state 1 in every vector, so it pulses once per cycle (also inside repeats) at the
+//         timeset period = 1 / clock frequency
 //   TRIG  input: wait for a low->high (or high->low) edge with the same compare + jump_if wait
 //         loop the DemoPrj-TDC patterns use (WaitForBusy)
 //   OUT1  square wave, f1 for n1 cycles, starting d1 after the trigger

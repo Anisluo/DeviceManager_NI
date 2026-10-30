@@ -11,6 +11,7 @@
 
 #include <dm/plugin.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -23,7 +24,7 @@ using Clock = std::chrono::steady_clock;
 static const char* kManifest = R"({
   "id": "tdc_measure",
   "name": "TDC测量",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "cpp",
   "abi": 1,
   "category": "task",
@@ -89,15 +90,33 @@ private:
         return *p;
     }
 
+    // Timesets evaluated against the specifications as edited on the page.
+    tdc::TimingModel model() const { return project_->model(tdc::spec_symbols(specs_now())); }
+
+    static double period_of(const tdc::TimingModel& tm, const std::string& ts)
+    {
+        auto it = tm.find(ts);
+        return it != tm.end() && it->second.period > 0 ? it->second.period : NaN;
+    }
+
     const Json& analysis(const std::string& name = {})
     {
         tdc::Pattern& p = pattern(name);
         std::string key = p.file + "|" + std::to_string(p.mtime) + "|" + std::to_string(busy_delay_);
         for (auto& [i, v] : p.edits) key += "|" + std::to_string(i) + "=" + std::to_string(v);
+        for (auto& [k, v] : spec_values_) key += "|" + k + "=" + v;
         auto it = cache_.find(key);
         if (it == cache_.end()) {
             if (cache_.size() > 64) cache_.clear();
-            it = cache_.emplace(key, tdc::analyze(p, project_->periods(), busy_delay_)).first;
+            const tdc::TimingModel tm = model();
+            Json a = tdc::analyze(p, tm, busy_delay_);
+            Json checks = Json::array();
+            for (auto& c : tdc::check(p, *project_, tm)) {
+                checks.push_back(c);
+                a["notes"].push_back(c);
+            }
+            a["checks"] = checks;
+            it = cache_.emplace(key, std::move(a)).first;
         }
         return it->second;
     }
@@ -213,16 +232,15 @@ private:
 
         method("vectors", "Decoded vectors of the current pattern", {}, [this](const Json&) {
             tdc::Pattern& p = pattern();
-            const auto periods = project_->periods();
+            const tdc::TimingModel tm = model();
             Json rows = Json::array();
             std::string pins;
             for (auto& pin : p.pins) pins += (pins.empty() ? "" : " ") + pin;
             for (size_t i = 0; i < p.base_ins.size(); ++i) {
                 const std::string ts = p.timeset_of(i);
-                auto it = periods.find(ts);
                 rows.push_back(Json{{"v", int(i)}, {"label", p.label_at(i)}, {"states", p.states[i]},
                                     {"instruction", p.instruction_text(i)}, {"timeset", ts},
-                                    {"period", tdc::fmt_time(it != periods.end() ? it->second : NaN)},
+                                    {"period", tdc::fmt_time(period_of(tm, ts))},
                                     {"comment", p.comments[i]}, {"edited", p.edits.count(i) ? "✎" : ""}});
             }
             return Json{{"pattern", p.file}, {"label", p.name}, {"pins", pins}, {"rows", rows}, {"vector_count", int(rows.size())}};
@@ -230,14 +248,14 @@ private:
 
         method("counts", "Editable repeat / set_loop counts of the current pattern (params widget rows)", {}, [this](const Json&) {
             tdc::Pattern& p = pattern();
-            const auto periods = project_->periods();
+            const tdc::TimingModel tm = model();
             const std::vector<uint32_t> ins = p.ins();
             Json rows = Json::array();
             for (size_t i = 0; i < ins.size(); ++i) {
                 const tdc::Decoded d = tdc::decode(ins[i]);
                 if (d.op != 1 && d.op != 4) continue;
-                auto it = periods.find(p.timeset_of(i));
-                const double period = it != periods.end() ? it->second : 0;
+                const double pv = period_of(tm, p.timeset_of(i));
+                const double period = std::isfinite(pv) ? pv : 0;
                 std::string unit, note;
                 if (d.op == 1) {
                     unit = "× " + tdc::fmt_time(period);
@@ -323,7 +341,7 @@ private:
                 if (!project_->timing_file.count(ts) || project_->timing_file[ts] != sheet)
                     throw PluginError(DM_E_STATE, p.file + " 的时序集不在同一个已知的时序表里");
             // run time of this burst: the program with a jittered BUSY (a simulated 6571 waits this long)
-            const tdc::RunResult rr = p.run(project_->periods(), busy_delay_, &rng_);
+            const tdc::RunResult rr = p.run(model(), busy_delay_, &rng_);
             double est = single ? (rr.outer_iteration >= 0 ? rr.outer_iteration : rr.total) : rr.total;
             // Manual trigger (simulation): the program stops in every TRIG wait loop until the user
             // gives an edge. One measurement = the part of an iteration outside the wait.
@@ -489,6 +507,57 @@ private:
                 rows.push_back(Json{{"name", name}, {"period", ts.period_text}, {"used_by", int(used.size())}, {"patterns", list}});
             }
             return kv("rows", rows);
+        });
+
+        method("timeset_edges", "Drive format and edges of every pin in each timeset, as in the editor's timing sheet "
+                                "(pattern=current: only the timesets and pins of the current pattern)", {"pattern"},
+               [this](const Json& a) {
+            const tdc::TimingModel tm = model();
+            std::vector<std::string> only_ts, only_pins;
+            if (a.boolean("pattern", false)) {
+                tdc::Pattern& p = pattern();
+                only_ts = p.used_timesets();
+                only_pins = p.pins;
+            }
+            auto in = [](const std::vector<std::string>& v, const std::string& x) {
+                return v.empty() || std::find(v.begin(), v.end(), x) != v.end();
+            };
+            auto edge = [](double v) { return std::isfinite(v) ? tdc::fmt_time(v) : std::string("\xE2\x80\x94"); };
+            Json rows = Json::array();
+            for (auto& [name, ts] : project_->timing) {
+                if (!in(only_ts, name)) continue;
+                auto mt = tm.find(name);
+                if (mt == tm.end()) continue;
+                const tdc::TimesetModel& m = mt->second;
+                for (auto& pe : ts.edges) {
+                    bool wanted = only_pins.empty();
+                    for (auto& x : project_->expand(pe.pin)) wanted = wanted || in(only_pins, x);
+                    if (!wanted) continue;
+                    // evaluated values: those of the first pin the entry covers
+                    const auto pins = project_->expand(pe.pin);
+                    auto ev = m.pins.find(pins.empty() ? pe.pin : pins.front());
+                    const tdc::EdgeTimes e = ev != m.pins.end() ? ev->second : tdc::EdgeTimes{};
+                    std::string problems;
+                    for (auto& [pin, msg] : m.problems)
+                        if (pin == pe.pin) problems += (problems.empty() ? "" : "；") + msg;
+                    const bool pulsed = e.format != "NR";
+                    rows.push_back(Json{{"timeset", name}, {"period", tdc::fmt_time(m.period > 0 ? m.period : NaN)},
+                                        {"pin", pe.pin}, {"format", tdc::format_name(pe.format)},
+                                        {"on", edge(e.on)}, {"data", edge(e.data)}, {"return", pulsed ? edge(e.ret) : "\xE2\x80\x94"},
+                                        {"off", edge(e.off)}, {"strobe", edge(e.strobe)},
+                                        {"note", problems.empty() ? pe.comment : (pe.comment.empty() ? "" : pe.comment + "；") + "⚠ " + problems},
+                                        {"sheet", tdc::base_name(m.sheet)}});
+                }
+            }
+            return kv("rows", rows);
+        });
+
+        method("checks", "What the editor would flag for the current pattern (pins, levels, timesets, edges)", {},
+               [this](const Json&) {
+            Json rows = Json::array();
+            for (auto& c : analysis()["checks"].items()) rows.push_back(Json{{"item", c}});
+            return Json{{"rows", rows}, {"count", int(rows.size())},
+                        {"text", rows.size() ? std::to_string(rows.size()) + " 项" : std::string("无问题")}};
         });
 
         method("pins", "Pin map: pins, channels, groups", {}, [this](const Json&) {

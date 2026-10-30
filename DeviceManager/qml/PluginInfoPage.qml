@@ -4,7 +4,8 @@ import QtQuick.Layouts
 import DeviceManager
 import DeviceManager.Core
 
-// Plugin details: manifest, README, devices using it and a raw method tester.
+// Plugin details: the devices using it (open their pages), its methods with a call tester,
+// the manifest, and the README folded away.
 Flickable {
     id: page
     property string pluginId: ""
@@ -72,98 +73,120 @@ Flickable {
             }
         }
 
-        GridLayout {
+        // Devices first: editing, configuring and running happen on the device page.
+        Card {
+            title: "设备"
+            subtitle: page.devices.length ? "编辑、配置和运行都在设备页面里" : ""
             Layout.fillWidth: true
-            columns: width > 900 ? 2 : 1
-            columnSpacing: Theme.gap
-            rowSpacing: Theme.gap
-
-            Card {
-                title: "清单"
-                Layout.fillWidth: true
-                Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
-                GridLayout {
-                    width: parent.width
-                    columns: 2
-                    columnSpacing: 16
-                    rowSpacing: 8
-                    Repeater {
-                        model: [
-                            ["ID", page.info.id], ["类别", page.info.category], ["入口", page.info.entry],
-                            ["目录", page.info.dir], ["库文件", page.info.library || "—"], ["页面", page.info.page || "—"]
-                        ]
-                        delegate: Item {
-                            required property var modelData
-                            Layout.columnSpan: 2
-                            Layout.fillWidth: true
-                            implicitHeight: row.implicitHeight
-                            RowLayout {
-                                id: row
-                                width: parent.width
-                                Text { text: modelData[0]; Layout.preferredWidth: 64; color: Theme.textMuted; font.family: Theme.sans; font.pixelSize: Theme.fontSm }
-                                Text { text: modelData[1] || "—"; Layout.fillWidth: true; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fontSm; wrapMode: Text.WrapAnywhere }
-                            }
-                        }
-                    }
-                    Text { text: "能力"; color: Theme.textMuted; font.family: Theme.sans; font.pixelSize: Theme.fontSm; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 64 }
-                    Flow {
-                        Layout.fillWidth: true
-                        spacing: 6
-                        Repeater {
-                            model: page.info.capabilities || []
-                            delegate: Rectangle {
-                                required property string modelData
-                                radius: 6
-                                color: Theme.surfaceAlt
-                                border.color: Theme.border
-                                implicitWidth: cap.implicitWidth + 12
-                                implicitHeight: 22
-                                Text { id: cap; anchors.centerIn: parent; text: modelData; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fontXs }
-                            }
-                        }
-                    }
+            ColumnLayout {
+                width: parent.width
+                spacing: 8
+                Text {
+                    visible: page.devices.length === 0
+                    text: "当前工位没有使用此插件的设备。在工位配置（station.json）的 devices 里加上它即可。"
+                    color: Theme.textFaint; font.family: Theme.sans; font.pixelSize: Theme.fontMd
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
-            }
-
-            Card {
-                title: "使用此插件的设备"
-                Layout.fillWidth: true
-                Layout.preferredWidth: 1
-                Layout.alignment: Qt.AlignTop
-                ColumnLayout {
-                    width: parent.width
-                    spacing: 6
-                    Text {
-                        visible: page.devices.length === 0
-                        text: "当前工位没有使用此插件的设备"
-                        color: Theme.textFaint; font.family: Theme.sans; font.pixelSize: Theme.fontMd
-                    }
-                    Repeater {
-                        model: page.devices
-                        delegate: SidebarItem {
-                            required property string modelData
-                            Layout.fillWidth: true
-                            text: modelData
-                            status: App.station.device(modelData) ? App.station.device(modelData).status : ""
-                            detail: "打开页面 →"
-                            onClicked: page.navigate("device", modelData)
+                Repeater {
+                    model: page.devices
+                    delegate: Rectangle {
+                        id: devRow
+                        required property string modelData
+                        readonly property var dev: App.station.device(modelData)
+                        Layout.fillWidth: true
+                        implicitHeight: 56
+                        radius: Theme.radiusSm
+                        color: Theme.bg
+                        border.color: Theme.border
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 10
+                            spacing: 12
+                            StatusDot { status: devRow.dev ? devRow.dev.status : "offline" }
+                            ColumnLayout {
+                                spacing: 1
+                                Layout.fillWidth: true
+                                Text { text: devRow.modelData; color: Theme.text; font.family: Theme.sans; font.pixelSize: Theme.fontLg }
+                                Text {
+                                    text: devRow.dev ? devRow.dev.resource + (devRow.dev.online ? " · 在线" : " · " + (devRow.dev.lastError || "离线")) : ""
+                                    color: Theme.textMuted; font.family: Theme.sans; font.pixelSize: Theme.fontXs
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+                            DmButton {
+                                text: "打开设备页面 →"
+                                kind: "primary"
+                                onClicked: page.navigate("device", devRow.modelData)
+                            }
                         }
                     }
                 }
             }
         }
 
+        // Methods the plugin exposes (read from a device using it), with a direct call tester.
         Card {
-            visible: page.testDevice !== null
-            title: "方法调试"
-            subtitle: page.testDevice ? "在设备 " + page.testDevice.name + " 上直接调用插件方法" : ""
+            title: "方法"
+            subtitle: page.methodList.length ? page.methodList.length + " 个 · 点一行填入下方调用" : ""
             Layout.fillWidth: true
             ColumnLayout {
                 width: parent.width
                 spacing: 10
+                Text {
+                    visible: page.methodList.length === 0
+                    text: page.testDevice ? "设备 " + page.testDevice.name + " 在线后列出插件方法" : "工位里有使用此插件的设备时列出插件方法"
+                    color: Theme.textFaint; font.family: Theme.sans; font.pixelSize: Theme.fontMd
+                }
+                Repeater {
+                    model: page.methodList
+                    delegate: Rectangle {
+                        id: mRow
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        implicitHeight: mLine.implicitHeight + 10
+                        radius: 6
+                        color: methodBox.currentIndex === index ? Theme.accentSoft : mHover.hovered ? Theme.surfaceAlt : "transparent"
+                        HoverHandler { id: mHover }
+                        RowLayout {
+                            id: mLine
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.leftMargin: 8
+                            anchors.rightMargin: 8
+                            spacing: 12
+                            Text {
+                                text: mRow.modelData.name + "(" + (mRow.modelData.args || []).join(", ") + ")"
+                                color: Theme.text
+                                font.family: Theme.mono
+                                font.pixelSize: Theme.fontSm
+                                Layout.preferredWidth: Math.min(implicitWidth, 360)
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: mRow.modelData.doc || ""
+                                color: Theme.textMuted
+                                font.family: Theme.sans
+                                font.pixelSize: Theme.fontSm
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: methodBox.currentIndex = mRow.index
+                        }
+                    }
+                }
                 RowLayout {
+                    visible: page.methodList.length > 0
                     Layout.fillWidth: true
+                    Layout.topMargin: 6
                     spacing: 8
                     DmComboBox {
                         id: methodBox
@@ -187,7 +210,7 @@ Flickable {
                     DmButton {
                         id: runButton
                         text: "调用"
-                        kind: "primary"
+                        kind: "secondary"
                         onClicked: {
                             let args = {}
                             try { args = argsField.text ? JSON.parse(argsField.text) : {} }
@@ -200,13 +223,8 @@ Flickable {
                         }
                     }
                 }
-                Text {
-                    text: page.methodList[methodBox.currentIndex] ? page.methodList[methodBox.currentIndex].doc : ""
-                    color: Theme.textMuted
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.fontSm
-                }
                 Rectangle {
+                    visible: resultText.text !== ""
                     Layout.fillWidth: true
                     implicitHeight: Math.max(60, resultText.implicitHeight + 20)
                     radius: Theme.radiusSm
@@ -228,12 +246,70 @@ Flickable {
         }
 
         Card {
-            title: "README"
+            title: "清单"
+            Layout.fillWidth: true
+            GridLayout {
+                width: parent.width
+                columns: 2
+                columnSpacing: 16
+                rowSpacing: 8
+                Repeater {
+                    model: [
+                        ["ID", page.info.id], ["类别", page.info.category], ["入口", page.info.entry],
+                        ["目录", page.info.dir], ["库文件", page.info.library || "—"], ["页面", page.info.page || "—"]
+                    ]
+                    delegate: Item {
+                        required property var modelData
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        implicitHeight: row.implicitHeight
+                        RowLayout {
+                            id: row
+                            width: parent.width
+                            Text { text: modelData[0]; Layout.preferredWidth: 64; color: Theme.textMuted; font.family: Theme.sans; font.pixelSize: Theme.fontSm }
+                            Text { text: modelData[1] || "—"; Layout.fillWidth: true; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fontSm; wrapMode: Text.WrapAnywhere }
+                        }
+                    }
+                }
+                Text { text: "能力"; color: Theme.textMuted; font.family: Theme.sans; font.pixelSize: Theme.fontSm; Layout.alignment: Qt.AlignTop; Layout.preferredWidth: 64 }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: page.info.capabilities || []
+                        delegate: Rectangle {
+                            required property string modelData
+                            radius: 6
+                            color: Theme.surfaceAlt
+                            border.color: Theme.border
+                            implicitWidth: cap.implicitWidth + 12
+                            implicitHeight: 22
+                            Text { id: cap; anchors.centerIn: parent; text: modelData; color: Theme.text; font.family: Theme.mono; font.pixelSize: Theme.fontXs }
+                        }
+                    }
+                }
+            }
+        }
+
+        // README stays available, folded away.
+        Card {
+            id: readmeCard
+            property bool expanded: false
+            title: "说明文档"
+            subtitle: expanded ? "" : "README，开发和部署时参考"
             Layout.fillWidth: true
             visible: readme.text !== ""
+            headerExtra: DmButton {
+                compact: true
+                kind: "ghost"
+                text: readmeCard.expanded ? "收起" : "展开"
+                onClicked: readmeCard.expanded = !readmeCard.expanded
+            }
             Text {
                 id: readme
+                visible: readmeCard.expanded
                 width: parent.width
+                height: visible ? implicitHeight : 0
                 text: App.plugins.readme(page.pluginId)
                 textFormat: Text.MarkdownText
                 wrapMode: Text.Wrap

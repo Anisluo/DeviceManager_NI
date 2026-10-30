@@ -1,5 +1,6 @@
 # build / release outputs
 /build/
+/build_plot/
 /release/
 /dist/
 /dist.zip

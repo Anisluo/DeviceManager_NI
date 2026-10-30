@@ -1,4 +1,5 @@
 #include "app/AppController.h"
+#include "app/PlotView.h"
 #include "app/SyntaxHighlighter.h"
 #include "app/WindowChrome.h"
 #include "core/Device.h"
@@ -132,6 +133,7 @@ int main(int argc, char* argv[])
     qmlRegisterUncreatableType<ScriptEngine>("DeviceManager.Core", 1, 0, "ScriptEngine", "singleton");
     qmlRegisterUncreatableType<DataStore>("DeviceManager.Core", 1, 0, "DataStore", "singleton");
     qmlRegisterType<SyntaxHighlighter>("DeviceManager.Core", 1, 0, "SyntaxHighlighter");
+    qmlRegisterType<PlotView>("DeviceManager.Core", 1, 0, "PlotView");
     qmlRegisterSingletonInstance("DeviceManager.Core", 1, 0, "App", &controller);
     WindowChrome chrome;
     qmlRegisterSingletonInstance("DeviceManager.Core", 1, 0, "WindowChrome", &chrome);

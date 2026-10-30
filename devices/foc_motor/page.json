@@ -1,0 +1,815 @@
+{
+ "title": "FOC 电机调试",
+ "subtitle": "PMSM · 编码器 · DMFOC 协议",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "st",
+   "method": "status",
+   "interval_ms": 100
+  },
+  {
+   "id": "info",
+   "method": "get_info",
+   "interval_ms": 3000
+  },
+  {
+   "id": "params",
+   "method": "params",
+   "interval_ms": 1500
+  }
+ ],
+ "tabs": [
+  {
+   "title": "运行",
+   "sections": [
+    {
+     "title": "状态",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "st",
+       "field": "state_text",
+       "unit": "",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "模式",
+       "source": "st",
+       "field": "mode_text",
+       "unit": "",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "故障",
+       "source": "st",
+       "field": "fault",
+       "states": {
+        "true": {
+         "text": "故障",
+         "tone": "error"
+        },
+        "false": {
+         "text": "正常",
+         "tone": "ok"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "转速",
+       "source": "st",
+       "field": "speed",
+       "unit": "rpm",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "Iq",
+       "source": "st",
+       "field": "iq",
+       "unit": "A",
+       "digits": 4
+      },
+      {
+       "type": "readout",
+       "label": "母线",
+       "source": "st",
+       "field": "vbus",
+       "unit": "V",
+       "digits": 4
+      },
+      {
+       "type": "readout",
+       "label": "绕组温度",
+       "source": "st",
+       "field": "temp",
+       "unit": "°C",
+       "digits": 4
+      }
+     ]
+    },
+    {
+     "title": "控制",
+     "span": 4,
+     "row_span": 2,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "mode",
+       "label": "模式",
+       "value": "SPEED",
+       "options": [
+        {
+         "label": "速度环",
+         "value": "SPEED"
+        },
+        {
+         "label": "电流环（力矩）",
+         "value": "CURRENT"
+        },
+        {
+         "label": "位置环",
+         "value": "POSITION"
+        },
+        {
+         "label": "开环 VF",
+         "value": "VF"
+        }
+       ]
+      },
+      {
+       "type": "number",
+       "id": "target",
+       "label": "目标",
+       "unit": "",
+       "value": 1000,
+       "step": 100,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "启动",
+       "style": "primary",
+       "action": {
+        "method": "run",
+        "args": {
+         "mode": "$form.mode",
+         "target": "$form.target"
+        }
+       },
+       "publish": "st",
+       "id": "run"
+      },
+      {
+       "type": "button",
+       "label": "更新目标",
+       "style": "secondary",
+       "action": {
+        "method": "set_target",
+        "args": {
+         "value": "$form.target"
+        }
+       },
+       "id": "set_target"
+      },
+      {
+       "type": "button",
+       "label": "停止",
+       "style": "secondary",
+       "action": {
+        "method": "command",
+        "args": {
+         "name": "disable"
+        }
+       },
+       "publish": "st",
+       "id": "stop"
+      },
+      {
+       "type": "button",
+       "label": "急停",
+       "style": "ghost",
+       "action": {
+        "method": "command",
+        "args": {
+         "name": "estop"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "button",
+       "label": "清除故障",
+       "style": "ghost",
+       "action": {
+        "method": "command",
+        "args": {
+         "name": "clear_fault"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "readout",
+       "label": "故障详情",
+       "source": "st",
+       "field": "fault_text"
+      },
+      {
+       "type": "readout",
+       "label": "提示",
+       "source": "st",
+       "field": "hint"
+      }
+     ]
+    },
+    {
+     "title": "转速",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "trend",
+       "height": 210,
+       "window_s": 10,
+       "series": [
+        {
+         "source": "st",
+         "field": "speed",
+         "label": "speed",
+         "unit": "rpm"
+        },
+        {
+         "source": "st",
+         "field": "speed_ref",
+         "label": "speed_ref",
+         "unit": "rpm"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "电流",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "trend",
+       "height": 210,
+       "window_s": 10,
+       "series": [
+        {
+         "source": "st",
+         "field": "iq",
+         "label": "iq",
+         "unit": "A"
+        },
+        {
+         "source": "st",
+         "field": "id",
+         "label": "id",
+         "unit": "A"
+        },
+        {
+         "source": "st",
+         "field": "iq_ref",
+         "label": "iq_ref",
+         "unit": "A"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "连接",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "port",
+       "label": "端口",
+       "value": "sim",
+       "options_from": {
+        "method": "list_ports",
+        "field": "ports"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "baud",
+       "label": "波特率",
+       "value": 921600,
+       "options": [
+        115200,
+        460800,
+        921600,
+        2000000
+       ]
+      },
+      {
+       "type": "button",
+       "label": "连接",
+       "style": "secondary",
+       "action": {
+        "method": "connect",
+        "args": {
+         "port": "$form.port",
+         "baud": "$form.baud"
+        }
+       },
+       "publish": "info"
+      },
+      {
+       "type": "readout",
+       "label": "固件",
+       "source": "info",
+       "field": "firmware",
+       "unit": "",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "端口",
+       "source": "info",
+       "field": "port",
+       "unit": "",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "仿真负载（仅仿真控制板）",
+     "span": 8,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "number",
+       "id": "load",
+       "label": "负载转矩",
+       "unit": "N·m",
+       "value": 0.2,
+       "min": -0.5,
+       "max": 0.5,
+       "step": 0.05,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "施加负载",
+       "style": "secondary",
+       "action": {
+        "method": "sim_set_load",
+        "args": {
+         "torque": "$form.load"
+        }
+       },
+       "id": "apply_load"
+      },
+      {
+       "type": "button",
+       "label": "卸载",
+       "style": "ghost",
+       "action": {
+        "method": "sim_set_load",
+        "args": {
+         "torque": 0
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "当前负载",
+       "source": "st",
+       "field": "load",
+       "unit": "N·m",
+       "digits": 3
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "参数",
+   "sections": [
+    {
+     "title": "固件参数表",
+     "subtitle": "由控制板上报；回车写入，超出范围会被固件限幅",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "params",
+       "source": "params"
+      }
+     ]
+    },
+    {
+     "title": "保存",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "保存到 Flash",
+       "style": "primary",
+       "action": {
+        "method": "command",
+        "args": {
+         "name": "save"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "button",
+       "label": "恢复默认参数",
+       "style": "secondary",
+       "action": {
+        "method": "command",
+        "args": {
+         "name": "defaults"
+        }
+       },
+       "reload_page": true
+      },
+      {
+       "type": "readout",
+       "label": "固件",
+       "source": "info",
+       "field": "firmware"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "整定",
+   "sections": [
+    {
+     "title": "阶跃测试",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "loop",
+       "label": "环路",
+       "value": "speed",
+       "options": [
+        {
+         "label": "电流环",
+         "value": "current"
+        },
+        {
+         "label": "速度环",
+         "value": "speed"
+        },
+        {
+         "label": "位置环",
+         "value": "position"
+        }
+       ]
+      },
+      {
+       "type": "number",
+       "id": "amp",
+       "label": "阶跃幅度",
+       "unit": "",
+       "value": 500,
+       "step": 50,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "base",
+       "label": "工作点",
+       "unit": "",
+       "value": 1000,
+       "step": 100,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "执行阶跃测试",
+       "style": "primary",
+       "action": {
+        "method": "step_test",
+        "args": {
+         "loop": "$form.loop",
+         "amplitude": "$form.amp",
+         "base": "$form.base"
+        }
+       },
+       "publish": "step",
+       "id": "step"
+      },
+      {
+       "type": "table",
+       "source": "step",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "metric",
+         "label": "指标"
+        },
+        {
+         "field": "value",
+         "label": "值",
+         "digits": 4
+        },
+        {
+         "field": "unit",
+         "label": "单位"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "响应",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "step",
+       "unit_index": 0,
+       "height": 260
+      },
+      {
+       "type": "scope",
+       "source": "step",
+       "unit_index": 1,
+       "height": 150
+      }
+     ]
+    },
+    {
+     "title": "环路参数",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "params",
+       "source": "params",
+       "group": "电流环"
+      },
+      {
+       "type": "params",
+       "source": "params",
+       "group": "速度环"
+      },
+      {
+       "type": "params",
+       "source": "params",
+       "group": "位置环"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "示波器",
+   "sections": [
+    {
+     "title": "采集设置",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "text",
+       "id": "chs",
+       "label": "通道",
+       "value": "ia,ib,ic",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "div",
+       "label": "分频",
+       "unit": "",
+       "value": 2,
+       "min": 1,
+       "max": 1000,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "number",
+       "id": "len",
+       "label": "点数",
+       "unit": "",
+       "value": 800,
+       "min": 10,
+       "max": 4000,
+       "step": 100,
+       "decimals": 0
+      },
+      {
+       "type": "text",
+       "id": "trig",
+       "label": "触发通道",
+       "value": "ia",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "lvl",
+       "label": "触发电平",
+       "unit": "",
+       "value": 0,
+       "step": 0.5,
+       "decimals": 3
+      },
+      {
+       "type": "combo",
+       "id": "edge",
+       "label": "边沿",
+       "value": "rising",
+       "options": [
+        {
+         "label": "上升",
+         "value": "rising"
+        },
+        {
+         "label": "下降",
+         "value": "falling"
+        },
+        {
+         "label": "双边",
+         "value": "both"
+        }
+       ]
+      },
+      {
+       "type": "button",
+       "label": "立即采集",
+       "style": "primary",
+       "action": {
+        "method": "scope_capture",
+        "args": {
+         "channels": "$form.chs",
+         "divider": "$form.div",
+         "length": "$form.len",
+         "trigger": "$form.trig",
+         "level": "$form.lvl",
+         "edge": "$form.edge",
+         "pre_pct": 10,
+         "force": true
+        }
+       },
+       "publish": "scope",
+       "id": "capture"
+      },
+      {
+       "type": "button",
+       "label": "等待触发",
+       "style": "secondary",
+       "action": {
+        "method": "scope_capture",
+        "args": {
+         "channels": "$form.chs",
+         "divider": "$form.div",
+         "length": "$form.len",
+         "trigger": "$form.trig",
+         "level": "$form.lvl",
+         "edge": "$form.edge",
+         "pre_pct": 10,
+         "force": false,
+         "timeout": 5
+        }
+       },
+       "publish": "scope"
+      },
+      {
+       "type": "readout",
+       "label": "可用通道",
+       "source": "info",
+       "field": "channel_names"
+      }
+     ]
+    },
+    {
+     "title": "波形",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "scope",
+       "unit_index": 0,
+       "height": 300
+      },
+      {
+       "type": "scope",
+       "source": "scope",
+       "unit_index": 1,
+       "height": 160
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "校准 / 辨识",
+   "sections": [
+    {
+     "title": "编码器零位校准",
+     "subtitle": "注入 d 轴电流对齐转子并转过一个极距；电机会转动",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "开始校准",
+       "style": "primary",
+       "action": {
+        "method": "calibrate",
+        "args": {}
+       },
+       "publish": "cal",
+       "id": "calibrate"
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "cal",
+       "field": "result",
+       "states": {
+        "OK": {
+         "text": "已校准",
+         "tone": "ok"
+        },
+        "FAIL": {
+         "text": "失败",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "电角度零位",
+       "source": "cal",
+       "field": "enc_offset",
+       "unit": "rad",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "方向",
+       "source": "cal",
+       "field": "enc_dir",
+       "states": {
+        "0": {
+         "text": "正向",
+         "tone": "ok"
+        },
+        "1": {
+         "text": "反向",
+         "tone": "warning"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "电机参数辨识",
+     "subtitle": "两点直流法测 Rs，电压阶跃 di/dt 测 Ld；转子需静止",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "辨识",
+       "style": "primary",
+       "action": {
+        "method": "identify",
+        "args": {}
+       },
+       "publish": "ident",
+       "id": "identify"
+      },
+      {
+       "type": "button",
+       "label": "辨识并写入 rs / ld / lq",
+       "style": "secondary",
+       "action": {
+        "method": "identify",
+        "args": {
+         "apply": true
+        }
+       },
+       "publish": "ident"
+      },
+      {
+       "type": "table",
+       "source": "ident",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "quantity",
+         "label": "量"
+        },
+        {
+         "field": "measured",
+         "label": "测得",
+         "digits": 4
+        },
+        {
+         "field": "configured",
+         "label": "当前设置",
+         "digits": 4
+        },
+        {
+         "field": "unit",
+         "label": "单位"
+        },
+        {
+         "field": "diff_pct",
+         "label": "差异 %",
+         "digits": 3
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

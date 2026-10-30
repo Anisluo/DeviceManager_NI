@@ -1,0 +1,519 @@
+{
+  "title": "仿真 SMU",
+  "subtitle": "通道 0 · 电压源 / 电流测量",
+  "columns": 12,
+  "sources": [
+    {
+      "id": "ch0",
+      "method": "measure",
+      "args": {
+        "channel": 0
+      },
+      "interval_ms": 200
+    }
+  ],
+  "tabs": [
+    {
+      "title": "手动",
+      "sections": [
+        {
+          "title": "输出设置",
+          "span": 4,
+          "row_span": 2,
+          "widgets": [
+            {
+              "type": "number",
+              "id": "vset",
+              "label": "电压",
+              "unit": "V",
+              "min": -6,
+              "max": 6,
+              "step": 0.01,
+              "decimals": 4,
+              "value": 1.8,
+              "init": {
+                "method": "get_config",
+                "args": {
+                  "channel": 0
+                },
+                "field": "voltage"
+              },
+              "action": {
+                "method": "set_voltage",
+                "args": {
+                  "channel": 0,
+                  "voltage": "$value"
+                }
+              }
+            },
+            {
+              "type": "number",
+              "id": "ilim",
+              "label": "限流",
+              "unit": "A",
+              "min": 1e-06,
+              "max": 0.5,
+              "step": 0.001,
+              "decimals": 4,
+              "value": 0.01,
+              "init": {
+                "method": "get_config",
+                "args": {
+                  "channel": 0
+                },
+                "field": "current_limit"
+              },
+              "action": {
+                "method": "set_current_limit",
+                "args": {
+                  "channel": 0,
+                  "current_limit": "$value"
+                }
+              }
+            },
+            {
+              "type": "combo",
+              "id": "load",
+              "label": "负载模型",
+              "options": [
+                {
+                  "label": "电阻 1 kΩ",
+                  "value": "resistor"
+                },
+                {
+                  "label": "二极管",
+                  "value": "diode"
+                },
+                {
+                  "label": "LDO 3.3 V",
+                  "value": "ldo"
+                }
+              ],
+              "init": {
+                "method": "get_config",
+                "args": {
+                  "channel": 0
+                },
+                "field": "load"
+              },
+              "action": {
+                "method": "set_load",
+                "args": {
+                  "channel": 0,
+                  "load": "$value"
+                }
+              }
+            },
+            {
+              "type": "number",
+              "id": "rload",
+              "label": "负载电阻",
+              "unit": "Ω",
+              "min": 1,
+              "max": 10000000.0,
+              "step": 10,
+              "decimals": 1,
+              "value": 1000,
+              "init": {
+                "method": "get_config",
+                "args": {
+                  "channel": 0
+                },
+                "field": "r_load"
+              },
+              "action": {
+                "method": "set_load",
+                "args": {
+                  "channel": 0,
+                  "r_load": "$value"
+                }
+              }
+            },
+            {
+              "type": "switch",
+              "id": "output",
+              "label": "输出使能",
+              "init": {
+                "method": "get_config",
+                "args": {
+                  "channel": 0
+                },
+                "field": "output"
+              },
+              "action": {
+                "method": "set_output",
+                "args": {
+                  "channel": 0,
+                  "enabled": "$value"
+                }
+              }
+            },
+            {
+              "type": "button",
+              "id": "reset",
+              "label": "复位全部通道",
+              "style": "secondary",
+              "action": {
+                "method": "reset"
+              },
+              "reload_page": true
+            }
+          ]
+        },
+        {
+          "title": "实时读数",
+          "span": 8,
+          "layout": "row",
+          "widgets": [
+            {
+              "type": "readout",
+              "label": "测量电压",
+              "source": "ch0",
+              "field": "voltage",
+              "unit": "V",
+              "digits": 6
+            },
+            {
+              "type": "readout",
+              "label": "测量电流",
+              "source": "ch0",
+              "field": "current",
+              "unit": "A",
+              "digits": 5
+            },
+            {
+              "type": "readout",
+              "label": "功耗",
+              "source": "ch0",
+              "expr": "voltage * current",
+              "unit": "W",
+              "digits": 4
+            },
+            {
+              "type": "readout",
+              "label": "限流状态",
+              "source": "ch0",
+              "field": "compliance",
+              "states": {
+                "true": {
+                  "text": "限流中",
+                  "tone": "warning"
+                },
+                "false": {
+                  "text": "正常",
+                  "tone": "ok"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "title": "趋势",
+          "span": 8,
+          "widgets": [
+            {
+              "type": "trend",
+              "height": 300,
+              "window_s": 30,
+              "series": [
+                {
+                  "source": "ch0",
+                  "field": "current",
+                  "label": "I",
+                  "unit": "A"
+                },
+                {
+                  "source": "ch0",
+                  "field": "voltage",
+                  "label": "V",
+                  "unit": "V",
+                  "axis": "right"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "设备事件",
+          "span": 12,
+          "widgets": [
+            {
+              "type": "log",
+              "height": 140
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "扫描",
+      "sections": [
+        {
+          "title": "LDO 线性 / 负载调整率",
+          "span": 4,
+          "row_span": 2,
+          "widgets": [
+            {
+              "type": "sweep",
+              "id": "linereg",
+              "name": "LDO 线性/负载调整率",
+              "kind": "scan",
+              "axes": [
+                {
+                  "name": "rload",
+                  "label": "负载电阻",
+                  "unit": "Ω",
+                  "values": [
+                    3300,
+                    660,
+                    330,
+                    110
+                  ],
+                  "method": "set_load",
+                  "args": {
+                    "channel": 0,
+                    "r_load": "$value"
+                  }
+                },
+                {
+                  "name": "vin",
+                  "label": "VIN",
+                  "unit": "V",
+                  "start": 3.0,
+                  "stop": 5.5,
+                  "step": 0.05,
+                  "method": "set_voltage",
+                  "args": {
+                    "channel": 0,
+                    "voltage": "$value"
+                  },
+                  "settle_ms": 5
+                }
+              ],
+              "measure": [
+                {
+                  "name": "vout",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "load_v"
+                },
+                {
+                  "name": "iin",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "current"
+                },
+                {
+                  "name": "comp",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "compliance"
+                }
+              ],
+              "setup": [
+                {
+                  "method": "set_load",
+                  "args": {
+                    "channel": 0,
+                    "load": "ldo",
+                    "ldo_vout": 3.3
+                  }
+                },
+                {
+                  "method": "set_current_limit",
+                  "args": {
+                    "channel": 0,
+                    "current_limit": 0.05
+                  }
+                },
+                {
+                  "method": "set_output",
+                  "args": {
+                    "channel": 0,
+                    "enabled": true
+                  }
+                }
+              ],
+              "teardown": [
+                {
+                  "method": "set_output",
+                  "args": {
+                    "channel": 0,
+                    "enabled": false
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "VOUT – VIN",
+          "span": 8,
+          "widgets": [
+            {
+              "type": "xy",
+              "x": "vin",
+              "y": "vout",
+              "group": "rload",
+              "x_unit": "V",
+              "y_unit": "V",
+              "height": 260
+            }
+          ]
+        },
+        {
+          "title": "IIN – VIN",
+          "span": 8,
+          "widgets": [
+            {
+              "type": "xy",
+              "x": "vin",
+              "y": "iin",
+              "group": "rload",
+              "x_unit": "V",
+              "y_unit": "A",
+              "height": 220
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Shmoo",
+      "sections": [
+        {
+          "title": "VIN × 负载 Shmoo",
+          "span": 4,
+          "widgets": [
+            {
+              "type": "sweep",
+              "id": "shmoo",
+              "name": "LDO 工作区 Shmoo",
+              "kind": "shmoo",
+              "axes": [
+                {
+                  "name": "rload",
+                  "label": "负载电阻",
+                  "unit": "Ω",
+                  "values": [
+                    2200,
+                    1000,
+                    470,
+                    330,
+                    220,
+                    150,
+                    100,
+                    82,
+                    68,
+                    56,
+                    47
+                  ],
+                  "method": "set_load",
+                  "args": {
+                    "channel": 0,
+                    "r_load": "$value"
+                  }
+                },
+                {
+                  "name": "vin",
+                  "label": "VIN",
+                  "unit": "V",
+                  "start": 3.0,
+                  "stop": 4.5,
+                  "step": 0.05,
+                  "method": "set_voltage",
+                  "args": {
+                    "channel": 0,
+                    "voltage": "$value"
+                  },
+                  "settle_ms": 5
+                }
+              ],
+              "measure": [
+                {
+                  "name": "vout",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "load_v"
+                },
+                {
+                  "name": "iin",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "current"
+                },
+                {
+                  "name": "comp",
+                  "method": "measure",
+                  "args": {
+                    "channel": 0
+                  },
+                  "field": "compliance"
+                }
+              ],
+              "pass": "vout >= 3.25 and not comp",
+              "setup": [
+                {
+                  "method": "set_load",
+                  "args": {
+                    "channel": 0,
+                    "load": "ldo",
+                    "ldo_vout": 3.3
+                  }
+                },
+                {
+                  "method": "set_current_limit",
+                  "args": {
+                    "channel": 0,
+                    "current_limit": 0.05
+                  }
+                },
+                {
+                  "method": "set_output",
+                  "args": {
+                    "channel": 0,
+                    "enabled": true
+                  }
+                }
+              ],
+              "teardown": [
+                {
+                  "method": "set_output",
+                  "args": {
+                    "channel": 0,
+                    "enabled": false
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "title": "通过区域",
+          "span": 8,
+          "widgets": [
+            {
+              "type": "shmoo",
+              "x": "vin",
+              "y": "rload",
+              "value": "pass",
+              "x_unit": "V",
+              "y_unit": "Ω",
+              "height": 360
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

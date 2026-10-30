@@ -1,0 +1,31 @@
+{
+  "name": "8881 · 6571 + K7 虚拟芯片",
+  "description": "PXIe-8881 + PXIe-6571（1.8 V）+ XC7K480T 板。上电前确认：6571 引脚映射与 FPGA 约束一致、FPGA 板 USB-UART 的 COM 口、Vivado（或 Vivado Lab）已安装且 hw_server 能看到 JTAG 线、bitstream 放在 bitstream_dir。",
+  "plugin_paths": [],
+  "default_page": "fpga1",
+  "data_dir": "../data",
+  "devices": [
+    { "name": "fpga1", "plugin": "fpga_k7", "resource": "XC7K480T", "simulate": false,
+      "options": {
+        "backend": "hw",
+        "reg_access": "uart",
+        "uart_port": "COM3",
+        "baud": 921600,
+        "hw_server": "localhost:3121",
+        "jtag_target": "",
+        "vivado": "",
+        "bitstream_dir": "D:/fpga/bitstreams"
+      } },
+    { "name": "dig1", "plugin": "ni_digital", "resource": "PXI1Slot15", "simulate": false,
+      "options": {
+        "backend": "driver",
+        "vdd": 1.8,
+        "expect_idcode": "0x0BB11477",
+        "pins":  { "SWCLK": 0, "SWDIO": 1, "nRST": 2, "PA0": 4, "PA1": 5, "PA2": 6, "PA3": 7,
+                   "SPI_SCK": 8, "SPI_MOSI": 9, "SPI_MISO": 10, "SPI_CS": 11 },
+        "pulls": { "SWDIO": "up", "nRST": "up", "SPI_CS": "up", "SWCLK": "down" },
+        "swd_phy": "static",
+        "swd_frequency": 1e6
+      } }
+  ]
+}

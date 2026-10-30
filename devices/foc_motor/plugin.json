@@ -1,0 +1,27 @@
+{
+  "id": "foc_motor",
+  "name": "FOC 电机调试",
+  "version": "0.1.0",
+  "type": "cpp",
+  "entry": "foc_motor",
+  "abi": 1,
+  "category": "instrument",
+  "description": "PMSM（编码器）FOC 控制板调试：USB 串口 DMFOC 协议（附固件端 C 代码），参数表由固件上报；电流/速度/位置环在线整定、阶跃测试指标、带触发的高速示波器、编码器零位校准、Rs/Ld 辨识。内置 20 kHz 仿真控制板。",
+  "capabilities": [
+    "motor.foc",
+    "motor.pmsm",
+    "scope",
+    "tuning",
+    "simulated"
+  ],
+  "page": "page.json",
+  "default_config": {
+    "resource": "FOC",
+    "simulate": true,
+    "options": {
+      "port": "sim",
+      "baud": 921600,
+      "auto_connect": true
+    }
+  }
+}

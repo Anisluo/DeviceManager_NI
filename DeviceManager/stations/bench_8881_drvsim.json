@@ -1,0 +1,11 @@
+{
+  "name": "8881 · 驱动仿真",
+  "description": "PXIe-8881 上用 NI-Digital 驱动的 simulate 模式打开 6571：不碰硬件，检查驱动 API 调用是否正确。需要 NI-Digital Pattern Driver 和 pip install nidigital hightime。",
+  "plugin_paths": [],
+  "default_page": "dig1",
+  "data_dir": "../data",
+  "devices": [
+    { "name": "dig1", "plugin": "ni_digital", "resource": "PXI1Slot15", "simulate": true,
+      "options": { "backend": "driver", "model": "6571", "vdd": 3.3, "swd_phy": "static", "swd_frequency": 1e6 } }
+  ]
+}

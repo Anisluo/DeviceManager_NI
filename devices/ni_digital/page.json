@@ -1,0 +1,1126 @@
+{
+ "title": "PXIe-6571 数字图形仪器",
+ "subtitle": "32 通道 · 100 MHz · 每引脚 PPMU",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "info",
+   "method": "get_info",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pins",
+   "method": "pin_table",
+   "interval_ms": 1000
+  },
+  {
+   "id": "pm",
+   "method": "ppmu_measure",
+   "args": {
+    "pins": "$form.pm_pin",
+    "what": "both"
+   },
+   "interval_ms": 300
+  }
+ ],
+ "tabs": [
+  {
+   "title": "概览",
+   "sections": [
+    {
+     "title": "仪器",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "型号",
+       "source": "info",
+       "field": "model"
+      },
+      {
+       "type": "readout",
+       "label": "后端",
+       "source": "info",
+       "field": "backend",
+       "states": {
+        "sim": {
+         "text": "纯仿真",
+         "tone": "accent"
+        },
+        "driver": {
+         "text": "NI-Digital 驱动",
+         "tone": "ok"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "复位（电平默认、PPMU 关、驱动高阻）",
+       "style": "secondary",
+       "action": {
+        "method": "reset",
+        "args": {}
+       },
+       "reload_page": true
+      }
+     ]
+    },
+    {
+     "title": "引脚状态",
+     "span": 8,
+     "row_span": 3,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pins",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "state",
+         "label": "比较器",
+         "tones": {
+          "H": "accent",
+          "M": "warning"
+         }
+        },
+        {
+         "field": "vih",
+         "label": "VIH",
+         "unit": "V",
+         "digits": 3
+        },
+        {
+         "field": "vil",
+         "label": "VIL",
+         "unit": "V",
+         "digits": 3
+        },
+        {
+         "field": "voh",
+         "label": "VOH",
+         "unit": "V",
+         "digits": 3
+        },
+        {
+         "field": "vol",
+         "label": "VOL",
+         "unit": "V",
+         "digits": 3
+        },
+        {
+         "field": "pull",
+         "label": "上下拉"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "电平",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "lv_pins",
+       "label": "引脚",
+       "value": "all",
+       "options_from": {
+        "method": "list_pins",
+        "field": "choices"
+       }
+      },
+      {
+       "type": "number",
+       "id": "lv_vil",
+       "label": "VIL",
+       "unit": "V",
+       "value": 0.0,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "lv_vih",
+       "label": "VIH",
+       "unit": "V",
+       "value": 3.3,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "lv_vol",
+       "label": "VOL",
+       "unit": "V",
+       "value": 0.99,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "lv_voh",
+       "label": "VOH",
+       "unit": "V",
+       "value": 2.31,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "lv_vterm",
+       "label": "VTERM",
+       "unit": "V",
+       "value": 1.65,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "应用电平",
+       "style": "primary",
+       "action": {
+        "method": "set_levels",
+        "args": {
+         "pins": "$form.lv_pins",
+         "vil": "$form.lv_vil",
+         "vih": "$form.lv_vih",
+         "vol": "$form.lv_vol",
+         "voh": "$form.lv_voh",
+         "vterm": "$form.lv_vterm"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "静态驱动",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "st_pins",
+       "label": "引脚",
+       "value": "GPIO",
+       "options_from": {
+        "method": "list_pins",
+        "field": "choices"
+       }
+      },
+      {
+       "type": "button",
+       "label": "驱动 0",
+       "style": "secondary",
+       "action": {
+        "method": "write_static",
+        "args": {
+         "pins": "$form.st_pins",
+         "state": "0"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "驱动 1",
+       "style": "secondary",
+       "action": {
+        "method": "write_static",
+        "args": {
+         "pins": "$form.st_pins",
+         "state": "1"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "高阻 X",
+       "style": "ghost",
+       "action": {
+        "method": "write_static",
+        "args": {
+         "pins": "$form.st_pins",
+         "state": "X"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "PPMU",
+   "sections": [
+    {
+     "title": "源",
+     "span": 4,
+     "row_span": 2,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pm_pin",
+       "label": "引脚",
+       "value": "PA0",
+       "options_from": {
+        "method": "list_pins",
+        "field": "pins"
+       }
+      },
+      {
+       "type": "number",
+       "id": "pm_v",
+       "label": "电压",
+       "unit": "V",
+       "value": 1.0,
+       "min": -2,
+       "max": 6,
+       "step": 0.1,
+       "decimals": 4
+      },
+      {
+       "type": "combo",
+       "id": "pm_rng",
+       "label": "电流量程",
+       "value": 0.002,
+       "options": [
+        {
+         "label": "2 µA",
+         "value": 2e-06
+        },
+        {
+         "label": "8 µA",
+         "value": 8e-06
+        },
+        {
+         "label": "32 µA",
+         "value": 3.2e-05
+        },
+        {
+         "label": "128 µA",
+         "value": 0.000128
+        },
+        {
+         "label": "512 µA",
+         "value": 0.000512
+        },
+        {
+         "label": "2 mA",
+         "value": 0.002
+        },
+        {
+         "label": "32 mA",
+         "value": 0.032
+        }
+       ]
+      },
+      {
+       "type": "button",
+       "label": "施加电压 FV",
+       "style": "primary",
+       "action": {
+        "method": "ppmu_force_voltage",
+        "args": {
+         "pins": "$form.pm_pin",
+         "voltage": "$form.pm_v",
+         "current_range": "$form.pm_rng"
+        }
+       }
+      },
+      {
+       "type": "number",
+       "id": "pm_i",
+       "label": "电流",
+       "unit": "A",
+       "value": -0.0001,
+       "min": -0.032,
+       "max": 0.032,
+       "step": 1e-05,
+       "decimals": 7
+      },
+      {
+       "type": "number",
+       "id": "pm_vlo",
+       "label": "电压下限",
+       "unit": "V",
+       "value": -2.0,
+       "step": 0.1,
+       "decimals": 2
+      },
+      {
+       "type": "number",
+       "id": "pm_vhi",
+       "label": "电压上限",
+       "unit": "V",
+       "value": 6.0,
+       "step": 0.1,
+       "decimals": 2
+      },
+      {
+       "type": "button",
+       "label": "施加电流 FI",
+       "style": "primary",
+       "action": {
+        "method": "ppmu_force_current",
+        "args": {
+         "pins": "$form.pm_pin",
+         "current": "$form.pm_i",
+         "v_low": "$form.pm_vlo",
+         "v_high": "$form.pm_vhi"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "关闭 PPMU",
+       "style": "secondary",
+       "action": {
+        "method": "ppmu_off",
+        "args": {
+         "pins": "$form.pm_pin"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "测量",
+     "span": 8,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "电压",
+       "source": "pm",
+       "field": "voltage",
+       "unit": "V",
+       "digits": 6
+      },
+      {
+       "type": "readout",
+       "label": "电流",
+       "source": "pm",
+       "field": "current",
+       "unit": "A",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "趋势",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "trend",
+       "height": 240,
+       "window_s": 30,
+       "series": [
+        {
+         "source": "pm",
+         "field": "current",
+         "label": "I",
+         "unit": "A"
+        },
+        {
+         "source": "pm",
+         "field": "voltage",
+         "label": "V",
+         "unit": "V",
+         "axis": "right"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "开短路 / 漏电",
+   "sections": [
+    {
+     "title": "开短路（ESD 二极管法）",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "ct_i",
+       "label": "测试电流",
+       "unit": "A",
+       "value": -0.0001,
+       "step": 1e-05,
+       "decimals": 6
+      },
+      {
+       "type": "number",
+       "id": "ct_lo",
+       "label": "下限",
+       "unit": "V",
+       "value": -0.95,
+       "step": 0.05,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "ct_hi",
+       "label": "上限",
+       "unit": "V",
+       "value": -0.25,
+       "step": 0.05,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "运行开短路测试",
+       "style": "primary",
+       "action": {
+        "method": "continuity",
+        "args": {
+         "pins": "all",
+         "current": "$form.ct_i",
+         "low": "$form.ct_lo",
+         "high": "$form.ct_hi"
+        }
+       },
+       "publish": "cont",
+       "id": "cont_run"
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "cont",
+       "field": "pass",
+       "states": {
+        "true": {
+         "text": "全部通过",
+         "tone": "ok"
+        },
+        "false": {
+         "text": "有失效引脚",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "table",
+       "source": "cont",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "voltage",
+         "label": "电压",
+         "unit": "V",
+         "digits": 4
+        },
+        {
+         "field": "status",
+         "label": "判定",
+         "tones": {
+          "ok": "ok",
+          "open": "error",
+          "short": "error",
+          "fail": "error"
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "漏电",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "lk_lim",
+       "label": "限值",
+       "unit": "A",
+       "value": 1e-06,
+       "step": 1e-07,
+       "decimals": 8
+      },
+      {
+       "type": "number",
+       "id": "lk_vh",
+       "label": "高电平",
+       "unit": "V",
+       "value": 3.3,
+       "step": 0.1,
+       "decimals": 3
+      },
+      {
+       "type": "button",
+       "label": "运行漏电测试",
+       "style": "primary",
+       "action": {
+        "method": "leakage",
+        "args": {
+         "pins": "all",
+         "limit": "$form.lk_lim",
+         "v_high": "$form.lk_vh"
+        }
+       },
+       "publish": "leak",
+       "id": "leak_run"
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "leak",
+       "field": "pass",
+       "states": {
+        "true": {
+         "text": "全部通过",
+         "tone": "ok"
+        },
+        "false": {
+         "text": "有失效引脚",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "table",
+       "source": "leak",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "i_low",
+         "label": "IIL",
+         "unit": "A",
+         "digits": 4
+        },
+        {
+         "field": "i_high",
+         "label": "IIH",
+         "unit": "A",
+         "digits": 4
+        },
+        {
+         "field": "pull",
+         "label": "上下拉"
+        },
+        {
+         "field": "status",
+         "label": "判定",
+         "tones": {
+          "ok": "ok",
+          "open": "error",
+          "short": "error",
+          "fail": "error"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "SWD",
+   "sections": [
+    {
+     "title": "连接",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "swd_phy",
+       "label": "物理层",
+       "value": "static",
+       "options": [
+        {
+         "label": "静态位翻转（首片调试）",
+         "value": "static"
+        },
+        {
+         "label": "图形 source/capture（全速）",
+         "value": "pattern"
+        }
+       ]
+      },
+      {
+       "type": "number",
+       "id": "swd_f",
+       "label": "SWCLK",
+       "unit": "Hz",
+       "value": 1000000.0,
+       "min": 1000.0,
+       "max": 50000000.0,
+       "step": 1000000.0,
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "label": "应用设置",
+       "style": "secondary",
+       "action": {
+        "method": "swd_configure",
+        "args": {
+         "phy": "$form.swd_phy",
+         "frequency": "$form.swd_f"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "连接 / 读 IDCODE",
+       "style": "primary",
+       "action": {
+        "method": "swd_connect",
+        "args": {}
+       },
+       "publish": "swd",
+       "id": "swd_conn"
+      },
+      {
+       "type": "readout",
+       "label": "IDCODE",
+       "source": "swd",
+       "field": "idcode_hex"
+      },
+      {
+       "type": "readout",
+       "label": "内核",
+       "source": "swd",
+       "field": "core"
+      },
+      {
+       "type": "readout",
+       "label": "CHIP ID",
+       "source": "swd",
+       "field": "chip_id_hex"
+      },
+      {
+       "type": "readout",
+       "label": "连接耗时",
+       "source": "swd",
+       "field": "time_ms",
+       "unit": "ms",
+       "digits": 4
+      }
+     ]
+    },
+    {
+     "title": "存储器（AHB-AP）",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "mem_a",
+       "label": "地址",
+       "unit": "",
+       "value": 536870912,
+       "format": "hex"
+      },
+      {
+       "type": "number",
+       "id": "mem_n",
+       "label": "字数",
+       "unit": "",
+       "value": 8,
+       "min": 1,
+       "max": 4096,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "label": "读取",
+       "style": "primary",
+       "action": {
+        "method": "mem_read",
+        "args": {
+         "address": "$form.mem_a",
+         "count": "$form.mem_n"
+        }
+       },
+       "publish": "mem",
+       "id": "mem_read"
+      },
+      {
+       "type": "number",
+       "id": "mem_v",
+       "label": "写入值",
+       "unit": "",
+       "value": 2779096485,
+       "format": "hex"
+      },
+      {
+       "type": "button",
+       "label": "写入并回读校验",
+       "style": "secondary",
+       "action": {
+        "method": "mem_write",
+        "args": {
+         "address": "$form.mem_a",
+         "value": "$form.mem_v"
+        }
+       },
+       "publish": "memw"
+      },
+      {
+       "type": "readout",
+       "label": "写入校验",
+       "source": "memw",
+       "field": "verified",
+       "states": {
+        "true": {
+         "text": "一致",
+         "tone": "ok"
+        },
+        "false": {
+         "text": "不一致",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "table",
+       "source": "mem",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "address",
+         "label": "地址"
+        },
+        {
+         "field": "value",
+         "label": "值"
+        },
+        {
+         "field": "dec",
+         "label": "十进制"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "内核控制",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "暂停",
+       "style": "secondary",
+       "action": {
+        "method": "core_halt",
+        "args": {}
+       },
+       "publish": "core",
+       "id": "core_halt"
+      },
+      {
+       "type": "button",
+       "label": "运行",
+       "style": "secondary",
+       "action": {
+        "method": "core_resume",
+        "args": {}
+       },
+       "publish": "core"
+      },
+      {
+       "type": "button",
+       "label": "复位并停在复位向量",
+       "style": "secondary",
+       "action": {
+        "method": "core_reset",
+        "args": {
+         "halt": true
+        }
+       },
+       "publish": "core"
+      },
+      {
+       "type": "readout",
+       "label": "内核状态",
+       "source": "core",
+       "field": "halted",
+       "states": {
+        "true": {
+         "text": "已暂停",
+         "tone": "warning"
+        },
+        "false": {
+         "text": "运行中",
+         "tone": "ok"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "读取内核寄存器",
+       "style": "primary",
+       "action": {
+        "method": "core_regs",
+        "args": {}
+       },
+       "publish": "regs",
+       "id": "core_regs"
+      },
+      {
+       "type": "table",
+       "source": "regs",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "reg",
+         "label": "寄存器"
+        },
+        {
+         "field": "value",
+         "label": "值"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "图形",
+   "sections": [
+    {
+     "title": "工程与图形",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "text",
+       "id": "pat_dir",
+       "label": "工程目录",
+       "mono": true,
+       "placeholder": "含 .pinmap / .specs / .digilevels / .digitiming / .digipat"
+      },
+      {
+       "type": "button",
+       "label": "加载工程",
+       "style": "secondary",
+       "action": {
+        "method": "load_project",
+        "args": {
+         "folder": "$form.pat_dir"
+        }
+       },
+       "publish": "proj"
+      },
+      {
+       "type": "text",
+       "id": "pat_file",
+       "label": "图形文件",
+       "mono": true,
+       "placeholder": "xxx.digipat"
+      },
+      {
+       "type": "button",
+       "label": "加载图形",
+       "style": "secondary",
+       "action": {
+        "method": "load_pattern",
+        "args": {
+         "path": "$form.pat_file"
+        }
+       },
+       "publish": "proj",
+       "id": "pat_load"
+      },
+      {
+       "type": "text",
+       "id": "pat_label",
+       "label": "起始标签",
+       "mono": true,
+       "value": "func_test"
+      },
+      {
+       "type": "number",
+       "id": "pat_period",
+       "label": "周期",
+       "unit": "s",
+       "value": 1e-07,
+       "min": 1e-08,
+       "max": 4e-05,
+       "step": 1e-08,
+       "decimals": 9
+      },
+      {
+       "type": "button",
+       "label": "设置周期",
+       "style": "ghost",
+       "action": {
+        "method": "set_period",
+        "args": {
+         "period": "$form.pat_period"
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "Burst",
+       "style": "primary",
+       "action": {
+        "method": "burst",
+        "args": {
+         "start_label": "$form.pat_label"
+        }
+       },
+       "publish": "burst",
+       "id": "burst_run"
+      }
+     ]
+    },
+    {
+     "title": "结果",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "Burst 结果",
+       "source": "burst",
+       "field": "result",
+       "states": {
+        "PASS": {
+         "text": "PASS",
+         "tone": "ok"
+        },
+        "FAIL": {
+         "text": "FAIL",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "table",
+       "source": "burst",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "fails",
+         "label": "失败次数"
+        },
+        {
+         "field": "status",
+         "label": "判定",
+         "tones": {
+          "ok": "ok",
+          "open": "error",
+          "short": "error",
+          "fail": "error"
+         }
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "Shmoo",
+   "sections": [
+    {
+     "title": "VIH × SWCLK",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "sweep",
+       "id": "swd_shmoo",
+       "name": "SWD VIH × SWCLK Shmoo",
+       "kind": "shmoo",
+       "axes": [
+        {
+         "name": "vih",
+         "label": "VIH",
+         "unit": "V",
+         "start": 2.0,
+         "stop": 3.4,
+         "step": 0.05,
+         "method": "set_levels",
+         "args": {
+          "pins": "SWD",
+          "vih": "$value"
+         }
+        },
+        {
+         "name": "fswd",
+         "label": "SWCLK",
+         "unit": "Hz",
+         "start": 2000000.0,
+         "stop": 40000000.0,
+         "step": 2000000.0,
+         "method": "swd_configure",
+         "args": {
+          "phy": "pattern",
+          "frequency": "$value"
+         }
+        }
+       ],
+       "measure": [
+        {
+         "name": "ok",
+         "method": "swd_check",
+         "field": "pass"
+        }
+       ],
+       "pass": "ok",
+       "setup": [
+        {
+         "method": "swd_configure",
+         "args": {
+          "phy": "pattern"
+         }
+        }
+       ],
+       "teardown": [
+        {
+         "method": "set_levels",
+         "args": {
+          "pins": "SWD",
+          "vih": 3.3
+         }
+        },
+        {
+         "method": "swd_configure",
+         "args": {
+          "phy": "static",
+          "frequency": 1000000.0
+         }
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "通过区域",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "shmoo",
+       "x": "fswd",
+       "y": "vih",
+       "value": "pass",
+       "x_unit": "Hz",
+       "y_unit": "V",
+       "height": 420
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

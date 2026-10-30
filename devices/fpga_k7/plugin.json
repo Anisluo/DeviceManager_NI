@@ -1,0 +1,26 @@
+{
+  "id": "fpga_k7",
+  "name": "K7 虚拟芯片平台",
+  "version": "0.1.0",
+  "type": "python",
+  "entry": "fpga_k7:FpgaK7",
+  "abi": 1,
+  "category": "instrument",
+  "description": "XC7K480T 流片前仿真平台：Vivado JTAG 下载 bitstream、XADC；UART 寄存器桥控制虚拟芯片的复位/时钟/模式、监测 6571 的 SWCLK、镜像 trim 寄存器；模拟量桩把 trim 码换算成 VREF/LDO/振荡器。附 RTL（UART 桥、AXI-Lite 适配、平台寄存器、顶层与 1.8 V 约束模板）。",
+  "capabilities": [
+    "fpga.program",
+    "fpga.xadc",
+    "fpga.registers",
+    "emulation.dut_control",
+    "analog_stub",
+    "simulated"
+  ],
+  "page": "page.json",
+  "default_config": {
+    "resource": "XC7K480T",
+    "simulate": true,
+    "options": {
+      "backend": "sim"
+    }
+  }
+}

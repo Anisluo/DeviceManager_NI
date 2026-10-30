@@ -1,0 +1,57 @@
+{
+  "title": "仿真 DMM",
+  "subtitle": "Python 插件",
+  "columns": 12,
+  "sources": [
+    { "id": "rd", "method": "read", "interval_ms": 250 }
+  ],
+  "sections": [
+    {
+      "title": "测量设置",
+      "span": 4,
+      "row_span": 2,
+      "widgets": [
+        { "type": "combo", "id": "function", "label": "功能",
+          "options": [ { "label": "直流电压 DCV", "value": "dcv" }, { "label": "直流电流 DCI", "value": "dci" } ],
+          "init":   { "method": "get_config", "field": "function" },
+          "action": { "method": "configure", "args": { "function": "$value" } } },
+        { "type": "combo", "id": "range", "label": "量程",
+          "options": [ { "label": "100 mV", "value": 0.1 }, { "label": "1 V", "value": 1 },
+                       { "label": "10 V", "value": 10 }, { "label": "100 V", "value": 100 } ],
+          "init":   { "method": "get_config", "field": "range" },
+          "action": { "method": "configure", "args": { "range": "$value" } } },
+        { "type": "number", "id": "nplc", "label": "NPLC", "min": 0.01, "max": 100, "step": 1, "decimals": 2,
+          "init":   { "method": "get_config", "field": "nplc" },
+          "action": { "method": "configure", "args": { "nplc": "$value" } } }
+      ]
+    },
+    {
+      "title": "读数",
+      "span": 8,
+      "layout": "row",
+      "widgets": [
+        { "type": "readout", "label": "读数", "source": "rd", "field": "value", "unit": "V", "digits": 7 },
+        { "type": "readout", "label": "量程", "source": "rd", "field": "range", "unit": "V", "digits": 3 },
+        { "type": "readout", "label": "读数计数", "source": "rd", "field": "n", "digits": 6 }
+      ]
+    },
+    {
+      "title": "趋势",
+      "span": 8,
+      "widgets": [
+        { "type": "trend", "height": 240, "window_s": 30,
+          "series": [ { "source": "rd", "field": "value", "label": "V", "unit": "V" } ] }
+      ]
+    },
+    {
+      "title": "设备事件",
+      "span": 6,
+      "widgets": [ { "type": "log", "height": 200 } ]
+    },
+    {
+      "title": "快速脚本",
+      "span": 6,
+      "widgets": [ { "type": "script", "id": "hello", "file": "hello_devices.py", "height": 200 } ]
+    }
+  ]
+}

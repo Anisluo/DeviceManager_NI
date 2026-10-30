@@ -1,0 +1,20 @@
+{
+  "name": "8881 · 6571 实机",
+  "description": "PXIe-8881 + PXIe-6571（PXI1Slot15）实机。上电前请按负载板实际接线修改 pins / pulls / expect_idcode；VDD 暂由外部或 4145 手动提供（ni_dcpower 插件在 M4）。",
+  "plugin_paths": [],
+  "default_page": "dig1",
+  "data_dir": "../data",
+  "devices": [
+    { "name": "dig1", "plugin": "ni_digital", "resource": "PXI1Slot15", "simulate": false,
+      "options": {
+        "backend": "driver",
+        "vdd": 3.3,
+        "expect_idcode": "0x0BB11477",
+        "pins":  { "SWCLK": 0, "SWDIO": 1, "nRST": 2, "PA0": 4, "PA1": 5, "PA2": 6, "PA3": 7,
+                   "SPI_SCK": 8, "SPI_MOSI": 9, "SPI_MISO": 10, "SPI_CS": 11 },
+        "pulls": { "SWDIO": "up", "nRST": "up", "SPI_CS": "up", "SWCLK": "down" },
+        "swd_phy": "static",
+        "swd_frequency": 1e6
+      } }
+  ]
+}

@@ -1,0 +1,571 @@
+{
+ "title": "XC7K480T 虚拟芯片平台",
+ "subtitle": "流片前：芯片 RTL 运行在 FPGA 上，6571 以 1.8 V 直连",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "st",
+   "method": "status",
+   "interval_ms": 1000
+  },
+  {
+   "id": "regs",
+   "method": "reg_dump",
+   "interval_ms": 2000
+  },
+  {
+   "id": "an",
+   "method": "analog_model",
+   "interval_ms": 1000
+  }
+ ],
+ "tabs": [
+  {
+   "title": "平台",
+   "sections": [
+    {
+     "title": "状态",
+     "span": 8,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "虚拟芯片",
+       "source": "st",
+       "field": "dut_running",
+       "states": {
+        "true": {
+         "text": "运行中",
+         "tone": "ok"
+        },
+        "false": {
+         "text": "停止（复位或无时钟）",
+         "tone": "warning"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "时钟锁定",
+       "source": "st",
+       "field": "clk_locked",
+       "states": {
+        "true": {
+         "text": "锁定",
+         "tone": "ok"
+        },
+        "false": {
+         "text": "未锁定",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "SWCLK 活动",
+       "source": "st",
+       "field": "swclk_active",
+       "states": {
+        "true": {
+         "text": "有 6571 时钟",
+         "tone": "accent"
+        },
+        "false": {
+         "text": "无",
+         "tone": "neutral"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "DUT 时钟",
+       "source": "st",
+       "field": "dut_clock_hz",
+       "unit": "Hz",
+       "digits": 4
+      }
+     ]
+    },
+    {
+     "title": "DUT 控制",
+     "span": 4,
+     "row_span": 2,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "复位并保持",
+       "style": "secondary",
+       "action": {
+        "method": "dut_reset",
+        "args": {
+         "hold": true
+        }
+       },
+       "publish": "st",
+       "id": "dut_hold"
+      },
+      {
+       "type": "button",
+       "label": "释放复位（上电复位）",
+       "style": "primary",
+       "action": {
+        "method": "dut_reset",
+        "args": {
+         "hold": false
+        }
+       },
+       "publish": "st",
+       "id": "dut_release"
+      },
+      {
+       "type": "number",
+       "id": "clk_mhz",
+       "label": "DUT 时钟",
+       "unit": "MHz",
+       "value": 25,
+       "min": 0.4,
+       "max": 100,
+       "step": 5,
+       "decimals": 2
+      },
+      {
+       "type": "button",
+       "label": "设置时钟",
+       "style": "secondary",
+       "action": {
+        "method": "dut_clock",
+        "args": {
+         "mhz": "$form.clk_mhz"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "button",
+       "label": "停止时钟",
+       "style": "ghost",
+       "action": {
+        "method": "dut_clock",
+        "args": {
+         "enable": false
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "button",
+       "label": "启动时钟",
+       "style": "ghost",
+       "action": {
+        "method": "dut_clock",
+        "args": {
+         "enable": true
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "number",
+       "id": "mode",
+       "label": "模式引脚",
+       "value": 0,
+       "format": "hex",
+       "digits": 2
+      },
+      {
+       "type": "button",
+       "label": "写入模式 GPIO_OUT[7:0]",
+       "style": "ghost",
+       "action": {
+        "method": "set_mode",
+        "args": {
+         "mode": "$form.mode"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "计数",
+     "span": 8,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "SWCLK 边沿（6571→FPGA）",
+       "source": "st",
+       "field": "swclk_edges",
+       "digits": 9
+      },
+      {
+       "type": "readout",
+       "label": "运行时间",
+       "source": "st",
+       "field": "uptime_s",
+       "unit": "s",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "CLK_DIV",
+       "source": "st",
+       "field": "clk_div"
+      },
+      {
+       "type": "readout",
+       "label": "GPIO_IN",
+       "source": "st",
+       "field": "gpio_in_hex"
+      }
+     ]
+    },
+    {
+     "title": "趋势",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "trend",
+       "height": 200,
+       "window_s": 60,
+       "series": [
+        {
+         "source": "st",
+         "field": "swclk_edges",
+         "label": "SWCLK 边沿",
+         "unit": ""
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "JTAG / 下载",
+   "sections": [
+    {
+     "title": "JTAG（Vivado hw_server）",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "连接 JTAG",
+       "style": "primary",
+       "action": {
+        "method": "jtag_connect",
+        "args": {}
+       },
+       "publish": "jtag",
+       "id": "jtag_conn"
+      },
+      {
+       "type": "readout",
+       "label": "器件",
+       "source": "jtag",
+       "field": "device"
+      },
+      {
+       "type": "readout",
+       "label": "IDCODE",
+       "source": "jtag",
+       "field": "idcode"
+      },
+      {
+       "type": "readout",
+       "label": "DONE",
+       "source": "jtag",
+       "field": "done",
+       "states": {
+        "1": {
+         "text": "已配置",
+         "tone": "ok"
+        },
+        "0": {
+         "text": "未配置",
+         "tone": "warning"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "目标",
+       "source": "jtag",
+       "field": "target"
+      }
+     ]
+    },
+    {
+     "title": "下载 bitstream",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "bit",
+       "label": "bitstream",
+       "options_from": {
+        "method": "list_bitstreams",
+        "field": "names"
+       }
+      },
+      {
+       "type": "button",
+       "label": "下载",
+       "style": "primary",
+       "action": {
+        "method": "program",
+        "args": {
+         "bitstream": "$form.bit"
+        }
+       },
+       "publish": "prog",
+       "id": "program"
+      },
+      {
+       "type": "readout",
+       "label": "平台 ID",
+       "source": "prog",
+       "field": "id_hex"
+      },
+      {
+       "type": "readout",
+       "label": "BUILD",
+       "source": "prog",
+       "field": "build_hex"
+      },
+      {
+       "type": "readout",
+       "label": "下载耗时",
+       "source": "prog",
+       "field": "program_s",
+       "unit": "s",
+       "digits": 3
+      },
+      {
+       "type": "button",
+       "label": "读取 XADC",
+       "style": "secondary",
+       "action": {
+        "method": "xadc",
+        "args": {}
+       },
+       "publish": "xadc",
+       "id": "xadc"
+      },
+      {
+       "type": "table",
+       "source": "xadc",
+       "columns": [
+        {
+         "field": "temperature",
+         "label": "结温",
+         "unit": "°C",
+         "digits": 4
+        },
+        {
+         "field": "vccint",
+         "label": "VCCINT",
+         "unit": "V",
+         "digits": 4
+        },
+        {
+         "field": "vccaux",
+         "label": "VCCAUX",
+         "unit": "V",
+         "digits": 4
+        },
+        {
+         "field": "vccbram",
+         "label": "VCCBRAM",
+         "unit": "V",
+         "digits": 4
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "寄存器",
+   "sections": [
+    {
+     "title": "读写",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "text",
+       "id": "ra",
+       "label": "地址/名称",
+       "value": "SCRATCH",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "rv",
+       "label": "值",
+       "value": 0,
+       "format": "hex"
+      },
+      {
+       "type": "button",
+       "label": "读取",
+       "style": "secondary",
+       "action": {
+        "method": "reg_read",
+        "args": {
+         "address": "$form.ra"
+        }
+       },
+       "publish": "rw"
+      },
+      {
+       "type": "button",
+       "label": "写入",
+       "style": "primary",
+       "action": {
+        "method": "reg_write",
+        "args": {
+         "address": "$form.ra",
+         "value": "$form.rv"
+        }
+       },
+       "publish": "rw"
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "rw",
+       "field": "readback"
+      },
+      {
+       "type": "button",
+       "label": "Ping（ID / BUILD）",
+       "style": "ghost",
+       "action": {
+        "method": "ping",
+        "args": {}
+       },
+       "publish": "ping"
+      },
+      {
+       "type": "readout",
+       "label": "链路延迟",
+       "source": "ping",
+       "field": "latency_ms",
+       "unit": "ms",
+       "digits": 3
+      }
+     ]
+    },
+    {
+     "title": "平台寄存器（dm_ctrl_regs）",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "regs",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "address",
+         "label": "地址"
+        },
+        {
+         "field": "name",
+         "label": "名称"
+        },
+        {
+         "field": "value",
+         "label": "值"
+        },
+        {
+         "field": "access",
+         "label": "访问"
+        },
+        {
+         "field": "doc",
+         "label": "说明"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "模拟量桩",
+   "sections": [
+    {
+     "title": "由 trim 码计算的模拟量",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "an",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "quantity",
+         "label": "量"
+        },
+        {
+         "field": "trim",
+         "label": "trim 寄存器"
+        },
+        {
+         "field": "code",
+         "label": "码"
+        },
+        {
+         "field": "value",
+         "label": "值",
+         "unit": "",
+         "digits": 6
+        },
+        {
+         "field": "unit",
+         "label": "单位"
+        },
+        {
+         "field": "error_pct",
+         "label": "偏差 %",
+         "digits": 3
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "说明",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "VREF",
+       "source": "an",
+       "field": "vref",
+       "unit": "V",
+       "digits": 6
+      },
+      {
+       "type": "readout",
+       "label": "VLDO",
+       "source": "an",
+       "field": "vldo",
+       "unit": "V",
+       "digits": 6
+      },
+      {
+       "type": "readout",
+       "label": "FOSC",
+       "source": "an",
+       "field": "fosc",
+       "unit": "Hz",
+       "digits": 6
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

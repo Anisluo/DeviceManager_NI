@@ -1,0 +1,20 @@
+{
+  "name": "8881 · FOC 电机调试",
+  "description": "真实 FOC 控制板，USB 串口 + DMFOC 固件协议。把 port 改成控制板的 COM 口。",
+  "plugin_paths": [],
+  "default_page": "motor1",
+  "data_dir": "../data",
+  "devices": [
+    {
+      "name": "motor1",
+      "plugin": "foc_motor",
+      "resource": "FOC",
+      "simulate": false,
+      "options": {
+        "port": "COM3",
+        "baud": 921600,
+        "auto_connect": true
+      }
+    }
+  ]
+}

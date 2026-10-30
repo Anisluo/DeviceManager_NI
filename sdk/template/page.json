@@ -1,0 +1,27 @@
+{
+  "title": "My Plugin",
+  "columns": 12,
+  "sources": [
+    { "id": "m", "method": "read", "args": {}, "interval_ms": 500 }
+  ],
+  "sections": [
+    {
+      "title": "设置",
+      "span": 4,
+      "widgets": [
+        { "type": "number", "id": "level", "label": "电平", "unit": "V", "min": 0, "max": 5, "step": 0.1, "decimals": 3,
+          "init":   { "method": "get_level", "field": "level" },
+          "action": { "method": "set_level", "args": { "level": "$value" } } }
+      ]
+    },
+    {
+      "title": "读数",
+      "span": 8,
+      "widgets": [
+        { "type": "readout", "label": "读数", "source": "m", "field": "value", "unit": "V", "digits": 6 },
+        { "type": "trend", "height": 220, "window_s": 30,
+          "series": [ { "source": "m", "field": "value", "label": "V", "unit": "V" } ] }
+      ]
+    }
+  ]
+}

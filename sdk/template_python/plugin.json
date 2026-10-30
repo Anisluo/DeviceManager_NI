@@ -1,0 +1,13 @@
+{
+  "id": "my_py_plugin",
+  "name": "My Python Plugin",
+  "version": "0.1.0",
+  "type": "python",
+  "entry": "my_py_plugin:MyPyPlugin",
+  "abi": 1,
+  "category": "instrument",
+  "description": "一句话说明这个插件做什么。",
+  "capabilities": ["simulated"],
+  "page": "page.json",
+  "default_config": { "resource": "SIM0", "simulate": true, "options": {} }
+}

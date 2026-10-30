@@ -1,0 +1,89 @@
+{
+  "name": "仿真开发工位",
+  "description": "无硬件开发用：PXIe-6571（Python 插件，纯仿真 + 虚拟 Cortex-M0）、两台仿真 SMU（C++）、一台仿真 DMM（Python，探测 smu1 的 LDO 输出）。另有 FOC 电机调试（C++ 插件，仿真控制板）。切换芯片或工位时只需换这个文件。",
+  "plugin_paths": [],
+  "default_page": "dig1",
+  "data_dir": "../../data",
+  "devices": [
+    {
+      "name": "dig1",
+      "plugin": "ni_digital",
+      "resource": "PXI1Slot15",
+      "simulate": true,
+      "options": {
+        "backend": "sim",
+        "vdd": 3.3,
+        "pins": {
+          "SWCLK": 0,
+          "SWDIO": 1,
+          "nRST": 2,
+          "PA0": 4,
+          "PA1": 5,
+          "PA2": 6,
+          "PA3": 7,
+          "SPI_SCK": 8,
+          "SPI_MOSI": 9,
+          "SPI_MISO": 10,
+          "SPI_CS": 11
+        },
+        "sim": {
+          "seed": 7,
+          "faults": {}
+        }
+      }
+    },
+    {
+      "name": "smu1",
+      "plugin": "sim_smu",
+      "resource": "SIM1",
+      "simulate": true,
+      "options": {
+        "channels": 4,
+        "power_on": {
+          "voltage": 3.6,
+          "current_limit": 0.05,
+          "output": true,
+          "load": "ldo",
+          "r_load": 330
+        }
+      }
+    },
+    {
+      "name": "smu2",
+      "plugin": "sim_smu",
+      "resource": "SIM2",
+      "simulate": true,
+      "options": {
+        "channels": 4,
+        "noise_i": 2e-08,
+        "noise_v": 0.0001
+      }
+    },
+    {
+      "name": "dmm1",
+      "plugin": "sim_dmm",
+      "resource": "SIMDMM1",
+      "simulate": true,
+      "options": {
+        "probe": {
+          "device": "smu1",
+          "method": "measure",
+          "args": {
+            "channel": 0
+          },
+          "field": "load_v"
+        }
+      }
+    },
+    {
+      "name": "motor1",
+      "plugin": "foc_motor",
+      "resource": "FOC-SIM",
+      "simulate": true,
+      "options": {
+        "port": "sim",
+        "auto_connect": true
+      }
+    }
+  ]
+}

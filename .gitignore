@@ -1,0 +1,36 @@
+# build / release outputs
+/build/
+/release/
+/dist/
+/dist.zip
+/package/
+
+# runtime data (SQLite results, captures)
+/data/
+/DeviceManager/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# generated at runtime
+__pycache__/
+*.pyc
+/devices/ni_digital/_generated/
+.shadow/
+
+# unrelated LAN remote-admin / SSH tool kept in the same folder
+/README.md
+/client.cpp
+/server.cpp
+/protocol.h
+/ssh_server.cpp
+/ssh_server.exe
+/ssh_server.ini
+/ssh_host_key
+/ssh_host_key.pub
+
+# editor / tool state
+.vscode/
+.idea/
+.claude/
+*.user

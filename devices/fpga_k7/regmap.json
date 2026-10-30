@@ -1,0 +1,25 @@
+{
+  "_comment": "Keep in sync with rtl/dm_ctrl_regs.v",
+  "sys_clk_hz": 200000000,
+  "registers": [
+    { "name": "ID",          "address": "0x000", "access": "ro", "doc": "0x444D4B37 = 'DMK7'" },
+    { "name": "BUILD",       "address": "0x004", "access": "ro", "doc": "build id, e.g. 0xYYMMDDHH" },
+    { "name": "SCRATCH",     "address": "0x008", "access": "rw", "doc": "free register for link tests" },
+    { "name": "STATUS",      "address": "0x00C", "access": "ro", "doc": "[0] clk_locked [1] dut_running [2] swclk_active",
+      "fields": { "clk_locked": [0, 0], "dut_running": [1, 1], "swclk_active": [2, 2] } },
+    { "name": "CTRL",        "address": "0x010", "access": "rw", "doc": "[0] DUT_RESET [1] DUT_CLK_EN",
+      "fields": { "dut_reset": [0, 0], "dut_clk_en": [1, 1] } },
+    { "name": "CLK_DIV",     "address": "0x014", "access": "rw", "doc": "DUT clock = sys_clk / (2 * (CLK_DIV + 1))" },
+    { "name": "UPTIME_MS",   "address": "0x018", "access": "ro", "doc": "ms since configuration" },
+    { "name": "GPIO_OUT",    "address": "0x01C", "access": "rw", "doc": "[7:0] mode straps to the chip" },
+    { "name": "GPIO_IN",     "address": "0x020", "access": "ro", "doc": "chip status word" },
+    { "name": "SWCLK_EDGES", "address": "0x024", "access": "ro", "doc": "SWCLK rising edges from the 6571" },
+    { "name": "TRIM_BG",     "address": "0x100", "access": "ro", "doc": "mirror of the chip's bandgap trim code" },
+    { "name": "TRIM_LDO",    "address": "0x104", "access": "ro", "doc": "mirror of the LDO trim code" },
+    { "name": "TRIM_OSC",    "address": "0x108", "access": "ro", "doc": "mirror of the oscillator trim code" },
+    { "name": "PROBE0",      "address": "0x200", "access": "ro", "doc": "internal probe 0" },
+    { "name": "PROBE1",      "address": "0x204", "access": "ro", "doc": "internal probe 1" },
+    { "name": "PROBE2",      "address": "0x208", "access": "ro", "doc": "internal probe 2" },
+    { "name": "PROBE3",      "address": "0x20C", "access": "ro", "doc": "internal probe 3" }
+  ]
+}

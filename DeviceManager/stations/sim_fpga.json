@@ -1,0 +1,14 @@
+{
+  "name": "仿真 · K7 虚拟芯片联调",
+  "description": "流片前联调（纯仿真）：PXIe-6571 以 1.8 V 连到 XC7K480T 上运行的虚拟芯片。6571 与 FPGA 平台的仿真共享同一颗虚拟芯片：FPGA 复位/停时钟会让 SWD 失效，6571 通过 SWD 写的 trim 码在 FPGA 寄存器里可见。",
+  "plugin_paths": [],
+  "default_page": "fpga1",
+  "data_dir": "../../data",
+  "devices": [
+    { "name": "fpga1", "plugin": "fpga_k7", "resource": "XC7K480T", "simulate": true,
+      "options": { "backend": "sim", "sim": { "seed": 5, "shared_dut": "k7chip" } } },
+    { "name": "dig1", "plugin": "ni_digital", "resource": "PXI1Slot15", "simulate": true,
+      "options": { "backend": "sim", "vdd": 1.8, "expect_idcode": "0x0BB11477",
+                   "sim": { "seed": 7, "vdd": 1.8, "shared_dut": "k7chip" } } }
+  ]
+}

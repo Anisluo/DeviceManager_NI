@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<PinMap xmlns="http://www.ni.com/TestStand/SemiconductorModule/PinMap.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" schemaVersion="1.2">
+	<Instruments>
+		<NIDigitalPatternInstrument name="PXI1Slot15" numberOfChannels="32" />
+	</Instruments>
+	<!---->
+	<Pins>
+		<DUTPin name="I0" />
+		<DUTPin name="I1" />
+		<DUTPin name="I2" />
+		<DUTPin name="I3" />
+		<DUTPin name="I4" />
+		<DUTPin name="I5" />
+		<DUTPin name="I6" />
+		<DUTPin name="I7" />
+		<DUTPin name="I8" />
+		<DUTPin name="I9" />
+		<DUTPin name="I10" />
+		<DUTPin name="I11" />
+		<DUTPin name="start" />
+		<DUTPin name="stop" />
+	</Pins>
+	<PinGroups>
+		<PinGroup name="AllPins">
+			<PinReference pin="I3" />
+			<PinReference pin="I1" />
+			<PinReference pin="I0" />
+			<PinReference pin="I2" />
+			<PinReference pin="I4" />
+			<PinReference pin="I5" />
+			<PinReference pin="I6" />
+			<PinReference pin="I7" />
+			<PinReference pin="I8" />
+			<PinReference pin="I9" />
+			<PinReference pin="I10" />
+			<PinReference pin="I11" />
+			<PinReference pin="start" />
+			<PinReference pin="stop" />
+		</PinGroup>
+		<PinGroup name="DataPins">
+			<PinReference pin="I11" />
+			<PinReference pin="I10" />
+			<PinReference pin="I9" />
+			<PinReference pin="I8" />
+			<PinReference pin="I7" />
+			<PinReference pin="I6" />
+			<PinReference pin="I5" />
+			<PinReference pin="I4" />
+			<PinReference pin="I3" />
+			<PinReference pin="I2" />
+			<PinReference pin="I1" />
+			<PinReference pin="I0" />
+		</PinGroup>
+	</PinGroups>
+	<Sites>
+		<Site siteNumber="0" />
+	</Sites>
+	<Connections>
+		<Connection pin="start" siteNumber="0" instrument="PXI1Slot15" channel="14" />
+		<Connection pin="I11" siteNumber="0" instrument="PXI1Slot15" channel="11" />
+		<Connection pin="I10" siteNumber="0" instrument="PXI1Slot15" channel="10" />
+		<Connection pin="I9" siteNumber="0" instrument="PXI1Slot15" channel="9" />
+		<Connection pin="I8" siteNumber="0" instrument="PXI1Slot15" channel="8" />
+		<Connection pin="I7" siteNumber="0" instrument="PXI1Slot15" channel="7" />
+		<Connection pin="I6" siteNumber="0" instrument="PXI1Slot15" channel="6" />
+		<Connection pin="I5" siteNumber="0" instrument="PXI1Slot15" channel="5" />
+		<Connection pin="I4" siteNumber="0" instrument="PXI1Slot15" channel="4" />
+		<Connection pin="I3" siteNumber="0" instrument="PXI1Slot15" channel="3" />
+		<Connection pin="I2" siteNumber="0" instrument="PXI1Slot15" channel="2" />
+		<Connection pin="I1" siteNumber="0" instrument="PXI1Slot15" channel="1" />
+		<Connection pin="I0" siteNumber="0" instrument="PXI1Slot15" channel="0" />
+		<Connection pin="stop" siteNumber="0" instrument="PXI1Slot15" channel="15" />
+	</Connections>
+</PinMap>

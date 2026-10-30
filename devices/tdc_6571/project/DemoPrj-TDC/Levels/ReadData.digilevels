@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PinLevelsFile xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" schemaVersion="1.0" xmlns="http://www.ni.com/Semiconductor/PinLevels">
+  <PinLevelsSheet>
+    <DigitalPinLevelSets>
+      <DigitalPinLevelSet pin="I2">
+        <Vil>0 V</Vil>
+        <Vih>5</Vih>
+        <Vol>0 V</Vol>
+        <Voh>DC.VDD</Voh>
+        <Iol>15 mA</Iol>
+        <Ioh>-15 mA</Ioh>
+        <Vterm>0</Vterm>
+        <TerminationMode>Vterm</TerminationMode>
+      </DigitalPinLevelSet>
+      <DigitalPinLevelSet pin="I1">
+        <Vil>0 V</Vil>
+        <Vih>5</Vih>
+        <Vol>0 V</Vol>
+        <Voh>DC.VDD</Voh>
+        <Iol>15 mA</Iol>
+        <Ioh>-15 mA</Ioh>
+        <Vterm>0</Vterm>
+        <TerminationMode>HighZ</TerminationMode>
+      </DigitalPinLevelSet>
+      <DigitalPinLevelSet pin="I0">
+        <Vil>0 V</Vil>
+        <Vih>DC.VDD</Vih>
+        <Vol>0.4*DC.VDD</Vol>
+        <Voh>0.6*DC.VDD</Voh>
+        <Iol>15 mA</Iol>
+        <Ioh>-15 mA</Ioh>
+        <Vterm>0</Vterm>
+        <TerminationMode>HighZ</TerminationMode>
+      </DigitalPinLevelSet>
+      <DigitalPinLevelSet pin="I3">
+        <Vil>0 V</Vil>
+        <Vih>DC.VDD</Vih>
+        <Vol>0 V</Vol>
+        <Voh>DC.VDD</Voh>
+        <Iol>15 mA</Iol>
+        <Ioh>-15 mA</Ioh>
+        <Vterm>0</Vterm>
+        <TerminationMode>HighZ</TerminationMode>
+      </DigitalPinLevelSet>
+    </DigitalPinLevelSets>
+  </PinLevelsSheet>
+</PinLevelsFile>

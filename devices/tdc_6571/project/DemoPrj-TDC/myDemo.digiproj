@@ -1,0 +1,58 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<SourceFile Checksum="A49B2C24F974E1AA111AC849FD95F73C" xmlns="http://www.ni.com/PlatformFramework">
+	<SourceModelFeatureSet>
+		<ParsableNamespace AssemblyFileVersion="5.3.2.62005" FeatureSetName="Digital Pattern Editor" Name="http://www.ni.com/PatternBasedDigital" OldestCompatibleVersion="4.5.0.0" Version="5.3.1.49152" />
+		<ParsableNamespace AssemblyFileVersion="5.3.2.62005" FeatureSetName="Editor" Name="http://www.ni.com/PlatformFramework" OldestCompatibleVersion="5.2.0.49153" Version="5.2.0.49153" />
+		<ApplicationVersionInfo Build="5.3.2.62005" Name="Digital Pattern Editor" Version="21.8.0" />
+	</SourceModelFeatureSet>
+	<Project xmlns="http://www.ni.com/PlatformFramework">
+		<ProjectSettings Id="1" ModelDefinitionType="ProjectSettings" Name="ZProjectSettings" />
+		<EmbeddedDefinitionReference Id="2" ModelDefinitionType="NationalInstruments.ProjectExplorer.Modeling.ProjectDataManager" Name="ProjectExplorer">
+			<ProjectExplorer />
+		</EmbeddedDefinitionReference>
+		<NameScopingEnvoy Id="3" ModelDefinitionType="DefaultTarget" Name="DefaultTarget">
+			<DefaultTarget />
+			<FileReference Id="20" ModelDefinitionType="PinLevelsDefinition" Name="ReadData\.digilevels" StoragePath="Levels\ReadData.digilevels" p4:IsActive="True" xmlns:p4="http://www.ni.com/PatternBasedDigital" />
+			<EmbeddedDefinitionReference Id="212" ModelDefinitionType="{http://www.ni.com/PatternBasedDigital}CaptureResultsDefinition" Name="CaptureResults">
+				<CaptureResultsDefinition xmlns="http://www.ni.com/PatternBasedDigital" />
+			</EmbeddedDefinitionReference>
+			<EmbeddedDefinitionReference Id="214" ModelDefinitionType="{http://www.ni.com/PatternBasedDigital}BurstResultsDefinition" Name="BurstResults">
+				<BurstResultsDefinition xmlns="http://www.ni.com/PatternBasedDigital" />
+			</EmbeddedDefinitionReference>
+			<EmbeddedDefinitionReference Id="217" ModelDefinitionType="{http://www.ni.com/PatternBasedDigital}DigitalScopeDefinition" Name="DigitalScope">
+				<DigitalScopeDefinition xmlns="http://www.ni.com/PatternBasedDigital" />
+			</EmbeddedDefinitionReference>
+			<FileReference Id="284" ModelDefinitionType="SpecificationsDefinition" Name="Specifications\.specs" StoragePath="Specifications\Specifications.specs" />
+			<FileReference Id="292" ModelDefinitionType="CaptureWaveformDefinition" Name="adc_data\.digicapture" StoragePath="Waveforms\adc_data.digicapture" />
+			<FileReference Id="604" ModelDefinitionType="CaptureWaveformDefinition" Name="CaptureWaveform\.digicapture" StoragePath="Waveforms\CaptureWaveform.digicapture" />
+			<FileReference Id="605" ModelDefinitionType="SourceWaveformDefinition" Name="SourceWaveform\.tdms" StoragePath="Waveforms\SourceWaveform.tdms" />
+			<FileReference Id="647" ModelDefinitionType="PinMap" Name="TDC\.pinmap" StoragePath="TDC.pinmap" p4:IsActive="True" xmlns:p4="http://www.ni.com/PatternBasedDigital" />
+			<FileReference Id="648" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC\.digipat" StoragePath="Patterns\TDC.digipat" />
+			<FileReference Id="649" ModelDefinitionType="TimingDefinition" Name="TDC\.digitiming" StoragePath="Timing\TDC.digitiming" p4:IsActive="True" xmlns:p4="http://www.ni.com/PatternBasedDigital" />
+			<FileReference Id="674" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_2\.digipat" StoragePath="Patterns\TDC_2.digipat" />
+			<FileReference Id="677" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_4\.digipat" StoragePath="Patterns\TDC_4.digipat" />
+			<FileReference Id="678" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_3\.digipat" StoragePath="Patterns\TDC_3.digipat" />
+			<FileReference Id="686" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_002\.digipat" StoragePath="Patterns\TDC_002.digipat" />
+			<FileReference Id="761" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_003\.digipat" StoragePath="Patterns\TDC_003.digipat" />
+			<FileReference Id="762" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_004\.digipat" StoragePath="Patterns\TDC_004.digipat" />
+			<FileReference Id="803" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_005\.digipat" StoragePath="Patterns\TDC_005.digipat" />
+			<FileReference Id="809" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_006\.digipat" StoragePath="Patterns\TDC_006.digipat" />
+			<SourceFileReference Id="813" ModelDefinitionType="{http://www.ni.com/PatternBasedDigital}SystemViewDefinition" Name="SystemView_2\.digisysview" StoragePath="SystemView_2.digisysview" />
+			<FileReference Id="816" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_1017\.digipat" StoragePath="Patterns\TDC_1017.digipat" />
+			<FileReference Id="843" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_1018\.digipat" StoragePath="Patterns\TDC_1018.digipat" />
+			<FileReference Id="847" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_1019\.digipat" StoragePath="Patterns\TDC_1019.digipat" />
+			<FileReference Id="850" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_1020\.digipat" StoragePath="Patterns\TDC_1020.digipat" />
+			<FileReference Id="858" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_500k\.digipat" StoragePath="Patterns\TDC_500k.digipat" />
+			<FileReference Id="868" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_Mode1\(20250220\)\.digipat" StoragePath="Patterns\TDC_Mode1(20250220).digipat" />
+			<FileReference Id="871" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_Debug\.digipat" StoragePath="Patterns\TDC_Debug.digipat" />
+			<FileReference Id="874" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_Mode2\(20250220\)\.digipat" StoragePath="Patterns\TDC_Mode2(20250220).digipat" />
+			<FileReference Id="877" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="EROS_V10_3Pins\.digipat" StoragePath="Patterns\EROS_V10_3Pins.digipat" />
+			<FileReference Id="878" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_Mode3\.digipat" StoragePath="Patterns\TDC_Mode3.digipat" />
+			<FileReference Id="880" ModelDefinitionType="DigitalPatternEditor.PatternDefinition" Name="TDC_2pin_6\.digipat" StoragePath="Patterns\TDC_2pin_6.digipat" />
+		</NameScopingEnvoy>
+		<EmbeddedDefinitionReference Id="7" ModelDefinitionType="DigitalPatternEditor.ProjectPropertiesDefinition" Name="ProjectProperties">
+			<ProjectPropertiesDefinition xmlns="http://www.ni.com/PatternBasedDigital" />
+		</EmbeddedDefinitionReference>
+	</Project>
+	<ProjectInformation xmlns="http://www.ni.com/PlatformFramework" />
+</SourceFile>

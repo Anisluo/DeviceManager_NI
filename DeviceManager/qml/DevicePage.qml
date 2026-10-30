@@ -46,6 +46,13 @@ Item {
         })
     }
 
+    // Widgets of a newly shown tab missed the earlier source updates: replay the cached values
+    // once they exist (slowly polled sources would otherwise stay empty until their next poll).
+    onSectionsChanged: Qt.callLater(replaySources)
+    function replaySources() {
+        for (const id in values) sourceUpdated(id, values[id])
+    }
+
     // Publish a result as if it came from a polled source (button "publish").
     function publish(id, data) {
         values[id] = data

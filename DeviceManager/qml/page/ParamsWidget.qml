@@ -6,7 +6,7 @@ import "../js/Format.js" as Fmt
 
 // { type: "params", source, write: "param_write", group: "电流环" (optional) }
 // Editable table of the parameters a device reports: rows { name, group, value, unit, min, max,
-// type: float|int|bool|enum, readonly, enums }. Enter writes; the device's answer (possibly
+// type: float|int|bool|enum, readonly, enums, note (optional text after the range) }. Enter writes; the device's answer (possibly
 // clamped) is shown. Rows are grouped by `group`.
 ColumnLayout {
     id: w
@@ -70,7 +70,9 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
                 Item {
-                    Layout.fillWidth: true
+                    // with a note the editor keeps a fixed width and the note takes the rest
+                    Layout.fillWidth: !rowItem.row.note
+                    Layout.preferredWidth: rowItem.row.note ? 150 : -1
                     Layout.preferredHeight: 34
                     // read-only
                     Text {
@@ -121,6 +123,7 @@ ColumnLayout {
                     font.pixelSize: Theme.fontSm
                 }
                 Text {
+                    visible: text.length > 0 || !rowItem.row.note     // an empty range gives its room to the note
                     text: rowItem.row.readonly ? "只读"
                         : (rowItem.row.min < rowItem.row.max && rowItem.row.type !== "bool" && rowItem.row.type !== "enum")
                           ? Fmt.eng(rowItem.row.min, 3) + " … " + Fmt.eng(rowItem.row.max, 3) : ""
@@ -129,6 +132,16 @@ ColumnLayout {
                     font.family: Theme.sans
                     font.pixelSize: Theme.fontXs
                 }
+                // optional free-text note (e.g. what a count means)
+                Text {
+                    visible: !!rowItem.row.note
+                    text: rowItem.row.note || ""
+                    Layout.fillWidth: true
+                    color: Theme.textMuted
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.fontSm
+                    elide: Text.ElideRight
+                }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border; opacity: 0.5 }
         }
@@ -136,7 +149,7 @@ ColumnLayout {
 
     Text {
         visible: w.rows.length === 0
-        text: "等待参数表…（先连接控制板）"
+        text: w.spec.empty || "等待参数表…（先连接控制板）"
         color: Theme.textFaint
         font.family: Theme.sans
         font.pixelSize: Theme.fontSm

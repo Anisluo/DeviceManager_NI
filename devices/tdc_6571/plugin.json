@@ -1,0 +1,24 @@
+{
+  "id": "tdc_6571",
+  "name": "TDC 测试（6571）",
+  "version": "0.1.0",
+  "type": "python",
+  "entry": "tdc_6571:Tdc6571",
+  "abi": 1,
+  "category": "instrument",
+  "description": "PXIe-6571 跑 TDC 激励程序（Digital Pattern Editor 工程 DemoPrj-TDC）：解码 .digipat，给出 START/HIT/BUSY 时序、循环次数与运行时间；在线修改 repeat/set_loop 次数并另存为新图形（无需编译器）；非阻塞 burst（进度、中止、PASS/FAIL）；规格/电平/时序/引脚查看。仿真模式带虚拟 TDC 的 BUSY 握手。",
+  "capabilities": [
+    "digital.pattern",
+    "tdc",
+    "simulated"
+  ],
+  "page": "page.json",
+  "default_config": {
+    "resource": "PXI1Slot15",
+    "simulate": true,
+    "options": {
+      "pattern": "TDC_M20_2",
+      "busy_delay_us": 120
+    }
+  }
+}

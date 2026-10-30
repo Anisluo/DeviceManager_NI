@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TimingFile xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" schemaVersion="1.0" xmlns="http://www.ni.com/Semiconductor/Timing">
+  <TimingSheet>
+    <TimeSets>
+      <TimeSet name="signal">
+        <Period>1 µs</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="wait">
+        <Period>5 µs</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="ten_ns">
+        <Period>10 ns</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="ten_us">
+        <Period>10 µs</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="twty_ns">
+        <Period>20 ns</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="Hund_us">
+        <Period>40 µs</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="one_us">
+        <Period>1 µs</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="ns_850">
+        <Period>850 ns</Period>
+        <PinEdges>
+          <PinEdge pin="AllPins">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="working">
+        <Period>2 µs</Period>
+        <PinEdges>
+          <PinEdge pin="I1">
+            <ReturnToLow>
+              <On>0</On>
+              <Data>1 µs</Data>
+              <Return>2 µs</Return>
+              <Off>1 µs</Off>
+            </ReturnToLow>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+            <Comment>2usHit</Comment>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="pulse_2us">
+        <Period>2 µs</Period>
+        <PinEdges>
+          <PinEdge pin="I1">
+            <ReturnToLow>
+              <On>0</On>
+              <Data>1 µs</Data>
+              <Return>2 µs</Return>
+              <Off>1 µs</Off>
+            </ReturnToLow>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+            <Comment>2usHit</Comment>
+          </PinEdge>
+          <PinEdge pin="I0">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="pulse_pin0">
+        <Period>2 µs</Period>
+        <PinEdges>
+          <PinEdge pin="I0">
+            <ReturnToLow>
+              <On>0</On>
+              <Data>1 µs</Data>
+              <Return>2 µs</Return>
+              <Off>1 µs</Off>
+            </ReturnToLow>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+      <TimeSet name="two_us">
+        <Period>2 µs</Period>
+        <PinEdges>
+          <PinEdge pin="I1">
+            <ReturnToLow>
+              <On>0</On>
+              <Data>1 µs</Data>
+              <Return>2 µs</Return>
+              <Off>1 µs</Off>
+            </ReturnToLow>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+          <PinEdge pin="I0">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+          <PinEdge pin="I2">
+            <DriveNonReturn>
+              <On>0</On>
+              <Data>0</Data>
+              <Off>0</Off>
+            </DriveNonReturn>
+            <CompareStrobe>
+              <Strobe>0</Strobe>
+            </CompareStrobe>
+            <DataSource>Pattern</DataSource>
+          </PinEdge>
+        </PinEdges>
+      </TimeSet>
+    </TimeSets>
+  </TimingSheet>
+</TimingFile>

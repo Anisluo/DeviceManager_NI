@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Specifications xmlns:f="http://www.ni.com/schemas/Semiconductor/Formula.xsd" schemaVersion="1.0" xmlns="http://www.ni.com/schemas/Semiconductor/Specifications.xsd">
+  <Section name="DC">
+    <f:Formula symbol="VDD">
+      <f:Definition>3.3 V</f:Definition>
+      <f:Comment>Power supply voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="VDDIO">
+      <f:Definition>3.3 V</f:Definition>
+      <f:Comment>Digital interface supply voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="Vih">
+      <f:Definition>3.3 V</f:Definition>
+      <f:Comment>Digital high-level input voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="Vil">
+      <f:Definition>0</f:Definition>
+      <f:Comment>Digital low-level input voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="Voh">
+      <f:Definition>3.3 V</f:Definition>
+      <f:Comment>High-level output voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="Vol">
+      <f:Definition>0</f:Definition>
+      <f:Comment>Low-level output voltage</f:Comment>
+    </f:Formula>
+    <f:Formula symbol="Iol">
+      <f:Definition>10 mA</f:Definition>
+    </f:Formula>
+    <f:Formula symbol="Ioh">
+      <f:Definition>-10 mA</f:Definition>
+    </f:Formula>
+  </Section>
+  <Section name="Time">
+    <f:Formula symbol="period">
+      <f:Definition>2.222 µs</f:Definition>
+    </f:Formula>
+  </Section>
+</Specifications>

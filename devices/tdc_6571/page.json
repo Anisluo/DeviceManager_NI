@@ -1,0 +1,761 @@
+{
+ "title": "TDC 测试（6571）",
+ "subtitle": "DemoPrj-TDC · START / HIT 激励 · BUSY 握手",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "st",
+   "method": "status",
+   "interval_ms": 300
+  },
+  {
+   "id": "sum",
+   "method": "summary",
+   "interval_ms": 800
+  },
+  {
+   "id": "tl",
+   "method": "timeline",
+   "interval_ms": 2000
+  },
+  {
+   "id": "info",
+   "method": "info",
+   "interval_ms": 5000
+  },
+  {
+   "id": "cnt",
+   "method": "counts",
+   "interval_ms": 1000
+  },
+  {
+   "id": "vec",
+   "method": "vectors",
+   "interval_ms": 2000
+  },
+  {
+   "id": "specs",
+   "method": "specs",
+   "interval_ms": 2000
+  },
+  {
+   "id": "lv",
+   "method": "levels",
+   "interval_ms": 3000
+  },
+  {
+   "id": "ts",
+   "method": "timesets",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pins",
+   "method": "pins",
+   "interval_ms": 3000
+  }
+ ],
+ "tabs": [
+  {
+   "title": "运行",
+   "sections": [
+    {
+     "title": "图形",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pat",
+       "label": "图形",
+       "options_from": {
+        "method": "list_patterns",
+        "field": "patterns"
+       },
+       "init": {
+        "method": "info",
+        "field": "current"
+       },
+       "action": {
+        "method": "select",
+        "args": {
+         "name": "$value"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "起始标签",
+       "source": "sum",
+       "field": "label",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "引脚角色",
+       "source": "sum",
+       "field": "roles_text",
+       "digits": 5
+      },
+      {
+       "type": "button",
+       "label": "运行",
+       "style": "primary",
+       "action": {
+        "method": "burst",
+        "args": {}
+       },
+       "publish": "st",
+       "id": "burst"
+      },
+      {
+       "type": "button",
+       "label": "单次试跑（外层循环 1 次）",
+       "style": "secondary",
+       "action": {
+        "method": "burst",
+        "args": {
+         "single": true
+        }
+       },
+       "publish": "st",
+       "id": "once"
+      },
+      {
+       "type": "button",
+       "label": "中止",
+       "style": "ghost",
+       "action": {
+        "method": "abort",
+        "args": {}
+       },
+       "publish": "st",
+       "id": "abort"
+      }
+     ]
+    },
+    {
+     "title": "TDC 时序",
+     "subtitle": "由图形解码得到；BUSY 等待按仿真芯片计",
+     "span": 8,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "START → HIT1",
+       "source": "sum",
+       "field": "start_to_hit",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "HIT 个数",
+       "source": "sum",
+       "field": "hit_count",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "HIT 周期",
+       "source": "sum",
+       "field": "hit_period",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "HIT 宽度",
+       "source": "sum",
+       "field": "hit_width",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "单次测量",
+       "source": "sum",
+       "field": "iteration_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "循环",
+       "source": "sum",
+       "field": "loops_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "总时间",
+       "source": "sum",
+       "field": "total_text",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "运行状态",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "st",
+       "field": "state_text",
+       "digits": 5,
+       "states": {
+        "运行中": {
+         "text": "运行中",
+         "tone": "accent"
+        },
+        "完成": {
+         "text": "完成",
+         "tone": "ok"
+        },
+        "空闲": {
+         "text": "空闲",
+         "tone": "muted"
+        },
+        "已中止": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "错误": {
+         "text": "错误",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "st",
+       "field": "result",
+       "digits": 5,
+       "states": {
+        "PASS": {
+         "text": "PASS",
+         "tone": "ok"
+        },
+        "FAIL": {
+         "text": "FAIL",
+         "tone": "error"
+        },
+        "ABORT": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "ERROR": {
+         "text": "错误",
+         "tone": "error"
+        },
+        "—": {
+         "text": "—",
+         "tone": "muted"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "进度",
+       "source": "st",
+       "field": "progress",
+       "digits": 3,
+       "unit": "%"
+      },
+      {
+       "type": "readout",
+       "label": "已用 / 预计",
+       "source": "st",
+       "field": "time_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "循环",
+       "source": "st",
+       "field": "loops_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "失败计数",
+       "source": "st",
+       "field": "fail_text",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "第一次测量的时序图",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "tl",
+       "unit_index": 0,
+       "height": 260
+      }
+     ]
+    },
+    {
+     "title": "事件",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "sum",
+       "rows_field": "events_rows",
+       "columns": [
+        {
+         "field": "event",
+         "label": "事件"
+        },
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "t",
+         "label": "时间"
+        },
+        {
+         "field": "rel",
+         "label": "相对 START"
+        },
+        {
+         "field": "width",
+         "label": "宽度 / 时长"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "检查",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "提示",
+       "source": "sum",
+       "field": "notes_text",
+       "digits": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "修改图形",
+   "sections": [
+    {
+     "title": "repeat / set_loop 次数",
+     "subtitle": "回车生效；时序和总时间实时更新。修改的是内存副本，运行时自动使用",
+     "span": 8,
+     "widgets": [
+      {
+       "type": "params",
+       "source": "cnt",
+       "write": "set_count",
+       "empty": "此图形没有可修改的次数"
+      }
+     ]
+    },
+    {
+     "title": "结果",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "HIT 个数",
+       "source": "sum",
+       "field": "hit_count",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "HIT 周期",
+       "source": "sum",
+       "field": "hit_period",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "START → HIT1",
+       "source": "sum",
+       "field": "start_to_hit",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "单次测量",
+       "source": "sum",
+       "field": "iteration_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "总时间",
+       "source": "sum",
+       "field": "total_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "sum",
+       "field": "modified",
+       "states": {
+        "true": {
+         "text": "已修改，未保存",
+         "tone": "warning"
+        },
+        "false": {
+         "text": "与文件一致",
+         "tone": "ok"
+        }
+       }
+      },
+      {
+       "type": "text",
+       "id": "save_name",
+       "label": "另存为",
+       "value": "",
+       "placeholder": "留空自动命名",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "保存为新图形",
+       "style": "primary",
+       "action": {
+        "method": "save_as",
+        "args": {
+         "name": "$form.save_name"
+        }
+       },
+       "id": "save",
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "撤销修改",
+       "style": "ghost",
+       "action": {
+        "method": "revert",
+        "args": {}
+       },
+       "publish": "sum",
+       "id": "revert"
+      }
+     ]
+    },
+    {
+     "title": "时序预览",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "tl",
+       "unit_index": 0,
+       "height": 220
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "向量",
+   "sections": [
+    {
+     "title": "解码后的向量",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "引脚",
+       "source": "vec",
+       "field": "pins",
+       "digits": 5
+      },
+      {
+       "type": "table",
+       "source": "vec",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "v",
+         "label": "#"
+        },
+        {
+         "field": "label",
+         "label": "标签"
+        },
+        {
+         "field": "states",
+         "label": "引脚状态"
+        },
+        {
+         "field": "instruction",
+         "label": "指令"
+        },
+        {
+         "field": "timeset",
+         "label": "时序"
+        },
+        {
+         "field": "period",
+         "label": "周期"
+        },
+        {
+         "field": "edited",
+         "label": "改"
+        },
+        {
+         "field": "comment",
+         "label": "注释"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "电平 / 时序",
+   "sections": [
+    {
+     "title": "规格（Specifications）",
+     "subtitle": "修改后重新加载电平与时序",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "params",
+       "source": "specs",
+       "write": "set_spec"
+      }
+     ]
+    },
+    {
+     "title": "时序集",
+     "span": 6,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "ts",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "name",
+         "label": "名称"
+        },
+        {
+         "field": "period",
+         "label": "周期"
+        },
+        {
+         "field": "used_by",
+         "label": "图形数"
+        },
+        {
+         "field": "patterns",
+         "label": "图形"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "引脚电平",
+     "subtitle": "按当前规格求值",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "lv",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "vil",
+         "label": "Vil"
+        },
+        {
+         "field": "vih",
+         "label": "Vih"
+        },
+        {
+         "field": "vol",
+         "label": "Vol"
+        },
+        {
+         "field": "voh",
+         "label": "Voh"
+        },
+        {
+         "field": "iol",
+         "label": "Iol"
+        },
+        {
+         "field": "ioh",
+         "label": "Ioh"
+        },
+        {
+         "field": "vterm",
+         "label": "Vterm"
+        },
+        {
+         "field": "mode",
+         "label": "端接"
+        },
+        {
+         "field": "formulas",
+         "label": "公式"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "引脚 / 工程",
+   "sections": [
+    {
+     "title": "引脚映射",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pins",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "instrument",
+         "label": "仪器"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "groups",
+         "label": "分组"
+        },
+        {
+         "field": "patterns",
+         "label": "用到的图形数"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "工程",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "工程",
+       "source": "info",
+       "field": "name",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "模式",
+       "source": "info",
+       "field": "mode",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "仪器",
+       "source": "info",
+       "field": "resource",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "图形数",
+       "source": "info",
+       "field": "patterns",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "电平表",
+       "source": "info",
+       "field": "levels",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "时序表",
+       "source": "info",
+       "field": "timing",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "规格表",
+       "source": "info",
+       "field": "specs",
+       "digits": 5
+      },
+      {
+       "type": "button",
+       "label": "重新扫描工程目录",
+       "style": "secondary",
+       "action": {
+        "method": "rescan",
+        "args": {}
+       },
+       "reload_page": true
+      }
+     ]
+    },
+    {
+     "title": "仿真 TDC",
+     "subtitle": "仅仿真：BUSY 在最后一个激励沿之后多久重新拉高",
+     "span": 5,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "number",
+       "id": "busy",
+       "label": "转换时间",
+       "unit": "µs",
+       "value": 120,
+       "min": 0,
+       "max": 100000,
+       "step": 10,
+       "decimals": 1
+      },
+      {
+       "type": "button",
+       "label": "应用",
+       "style": "secondary",
+       "action": {
+        "method": "sim_set_busy",
+        "args": {
+         "us": "$form.busy"
+        }
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

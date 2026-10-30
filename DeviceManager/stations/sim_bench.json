@@ -84,6 +84,15 @@
         "port": "sim",
         "auto_connect": true
       }
+    },
+    {
+      "name": "tdc1",
+      "plugin": "tdc_6571",
+      "resource": "PXI1Slot15",
+      "simulate": true,
+      "options": {
+        "pattern": "TDC_M20_2"
+      }
     }
   ]
 }

@@ -91,6 +91,15 @@ struct Pinmap {
     std::map<std::string, Connection> connections;
 };
 
+// Levels of one pin in volts, formulas evaluated; what the simulated waveform draws.
+struct PinVolts {
+    double vil = 0, vih = 1, vol = 0, voh = 1, vterm = 0;
+    bool terminated = false;               // TerminationMode Vterm: an undriven pin sits at vterm
+    bool defined = false;                  // false: no levels for this pin, drawn from 0 to 1
+    int channel = -1;                      // from the pin map, -1 when not connected
+};
+using PinVoltMap = std::map<std::string, PinVolts>;
+
 struct LevelRow {
     std::string pin;
     std::map<std::string, std::string> fields;   // Vil, Vih, ..., TerminationMode
@@ -156,8 +165,9 @@ public:
     // std::invalid_argument and changes nothing. Labels are referenced by index, so inserting and
     // deleting vectors leaves end_loop / jump_if targets intact.
     void set_state(size_t v, const std::string& pin, const std::string& state);
-    // Same text as instruction_text(): "", repeat(n), set_loop(n), end_loop(label),
-    // jump_if(0x28!, label), halt, plus an optional "[flags 0x20]".
+    // Same text as instruction_text(): "", repeat(n), set_loop(n), end_loop(label), match,
+    // jump_if(!matched, label), halt, plus an optional "[flags 0x20]". A jump_if condition with no
+    // known name is written as its flags, jump_if(0x28!, label) means the same as !matched.
     void set_instruction(size_t v, const std::string& text);
     void set_timeset(size_t v, const std::string& name);
     void set_label(size_t v, const std::string& name);       // empty: remove an unreferenced label
@@ -165,11 +175,14 @@ public:
     void insert_vector(size_t after);                        // copy of the vector's pin states, no instruction
     void remove_vector(size_t v);
     void add_pin(const std::string& pin);                    // new column of X
+    bool rename_pin(const std::string& from, const std::string& to);       // false: not in this pattern
+    bool rename_timeset(const std::string& from, const std::string& to);
     void remove_pin(const std::string& pin);
     // Replace the content with one halt vector of X on `pins`, starting at `label`.
     void clear(const std::string& label, const std::vector<std::string>& pins, const std::string& timeset);
     void reset();                                            // discard every edit
     void commit(const std::string& bytes);                   // `bytes` are the file now
+    void saved(const std::string& bytes);                    // same, keeps what undo() can go back to
     void checkpoint();                                       // remember the state for undo()
     bool undo();                                             // back to the last checkpoint, false if none
 
@@ -192,7 +205,7 @@ public:
 // TDC timing of a pattern: pin roles, START / HIT timing, loops, run time, events and the
 // timeline in the scope widget format. Edges follow the drive formats of the timing model.
 // Missing values are NaN (JSON null).
-dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay);
+dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay, const PinVoltMap& volts = {});
 
 class Project;
 // What the editor would flag before running: pins outside the pin map or without a channel,
@@ -219,6 +232,8 @@ public:
     // Every timeset with periods and edges evaluated against `symbols` (spec_symbols()).
     TimingModel model(const std::map<std::string, double>& symbols) const;
     TimingModel model() const;                               // against the project's specifications
+    // Levels and channels of every pin; a pin's own entry wins over its group's.
+    PinVoltMap pin_volts(const std::map<std::string, double>& symbols) const;
     std::map<std::string, double> periods() const;
     std::vector<std::string> timing_files() const;           // every .digitiming, project first
 };

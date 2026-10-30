@@ -329,7 +329,7 @@ int main(int argc, char** argv)
     CHECK(v.str("pins") == "I3 I0 I1 I2", "gen pins %s", v.str("pins").c_str());
     bool wait_ok = false, clock_ok = true;
     for (auto& r : v["rows"].items()) {
-        if (r.str("label") == "WaitEdge") wait_ok = r.str("instruction").rfind("jump_if(0x28!, WaitEdge)", 0) == 0 && r.str("states") == "1H00";
+        if (r.str("label") == "WaitEdge") wait_ok = r.str("instruction").rfind("jump_if(!matched, WaitEdge)", 0) == 0 && r.str("states") == "1H00";
         clock_ok = clock_ok && r.str("states")[0] == '1';
     }
     CHECK(wait_ok && clock_ok, "wait loop / clock");
@@ -374,6 +374,20 @@ int main(int argc, char** argv)
     CHECK(ev["rows"].items()[5].str("instruction").empty(), "inserted vector has no instruction");
     CHECK(ev["rows"].items()[4].str("instruction") == v0["rows"].items()[4].str("instruction"), "jump_if target intact");
     call("edit_vector", cell(5, "instruction", "repeat(1000)"));
+    {
+        // !matched and its flags are the same instruction word, and the file keeps it
+        const std::string word = "jump_if(!matched, WaitForBusy)";
+        CHECK(ev["rows"].items()[4].str("instruction") == word, "jump_if shown as %s", ev["rows"].items()[4].str("instruction").c_str());
+        call("edit_vector", cell(5, "instruction", word));
+        CHECK(call("vectors")["rows"].items()[5].str("instruction") == word, "!matched parsed");
+        call("edit_vector", cell(5, "instruction", "jump_if(0x28!, WaitForBusy)"));
+        CHECK(call("vectors")["rows"].items()[5].str("instruction") == word, "flags give the same instruction");
+        call("edit_vector", cell(5, "instruction", "jump_if(0x28, WaitForBusy)"));
+        CHECK(call("vectors")["rows"].items()[5].str("instruction") == "jump_if(0x28, WaitForBusy)", "an unknown condition stays as flags");
+        call("edit_vector", cell(5, "instruction", "jump_if(matched, WaitForBusy)"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "matched has no known encoding yet");
+        call("edit_vector", cell(5, "instruction", "repeat(1000)"));
+    }
     call("edit_vector", cell(5, "comment", "加一段等待"));
     call("edit_vector", cell(5, "label", "Added"));
     call("edit_vector", cell(5, "timeset", "ten_us"));
@@ -514,10 +528,176 @@ int main(int argc, char** argv)
     CHECK(rc == DM_E_BAD_ARGS, "duplicate spec refused");
     call("remove_spec", kv("key", "Extra.limit"));
     CHECK(read(spec_sheet).find("Extra.limit") == std::string::npos && read(spec_sheet).find("symbol=\"limit\"") == std::string::npos, "spec removed");
+    {
+        auto spec_keys = [] { const Json table = call("spec_rows"); std::string k; for (auto& r : table["rows"].items()) k += r.str("key") + " "; return k; };
+        const Json made = call("add_spec");                    // one click: a free name in the last section
+        const std::string made_key = made.str("key");
+        CHECK(made_key == "Time.Spec1", "new row %s", made_key.c_str());
+        call("add_spec");
+        CHECK(spec_keys().find("Time.Spec2") != std::string::npos, "next free name");
+        call("remove_spec", kv("key", "Time.Spec2"));
+        call("set_spec_text", Json{{"key", made_key}, {"field", "symbol"}, {"value", "gap"}});
+        call("set_spec_text", Json{{"key", "Time.gap"}, {"field", "definition"}, {"value", "4 ns"}});
+        call("set_spec_text", Json{{"key", "Time.gap"}, {"field", "section"}, {"value", "Extra"}});
+        CHECK(spec_keys().find("Extra.gap") != std::string::npos, "moved to a new section: %s", spec_keys().c_str());
+        call("set_spec_text", Json{{"key", "Extra.gap"}, {"field", "symbol"}, {"value", "VDD"}});
+        call("set_spec_text", Json{{"key", "Extra.gap"}, {"field", "symbol"}, {"value", "1bad"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "bad symbol refused");
+        call("set_spec_text", Json{{"key", "Extra.VDD"}, {"field", "symbol"}, {"value", "gap"}});
+        call("set_spec_text", Json{{"key", "Extra.gap"}, {"field", "section"}, {"value", "DC"}}, &rc);
+        call("set_spec_text", Json{{"key", "DC.gap"}, {"field", "section"}, {"value", "Extra"}});
+
+        // names in formulas follow; a name in use stays
+        call("set_level", Json{{"pin", "I2"}, {"field", "Vih"}, {"value", "Extra.gap*2"}});
+        call("remove_spec", kv("key", "Extra.gap"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "a spec in use stays");
+        call("set_spec_text", Json{{"key", "Extra.gap"}, {"field", "symbol"}, {"value", "gap2"}});
+        CHECK(read(level_sheet).find("<Vih>Extra.gap2*2</Vih>") != std::string::npos, "rename reaches the formula");
+        call("set_level", Json{{"pin", "I2"}, {"field", "Vih"}, {"value", "5"}});
+        call("remove_spec", kv("key", "Extra.gap2"));
+        CHECK(read(spec_sheet).find("<Section name=\"Extra\">") == std::string::npos, "an empty section goes too");
+    }
     const Json one_ts = call("timeset_edges", kv("timeset", "ten_us"));
     bool only_one = one_ts["rows"].size() > 0;
     for (auto& r : one_ts["rows"].items()) only_one = only_one && r.str("timeset") == "ten_us";
     CHECK(only_one, "edges of one timeset");
+
+    std::printf("waveform follows the sheets\n");
+    {
+        // (t [ms], value) of each change of pin k, from t0 on
+        auto changes = [](const Json& tl, size_t k, double t0) {
+            std::vector<std::pair<double, double>> out;
+            const auto& ts = tl["t"].items();
+            const auto& data = tl["channels"].items()[k]["data"].items();
+            for (size_t i = 1; i < ts.size(); ++i)
+                if (ts[i].as_number() >= t0 - 1e-9 && data[i].as_number() != data[i - 1].as_number())
+                    out.emplace_back(ts[i].as_number(), data[i].as_number());
+            return out;
+        };
+        auto edge = [](const char* field, const std::string& value, const char* pin = "AllPins") {
+            return Json{{"timeset", "ten_ns"}, {"pin", pin}, {"field", field}, {"value", value}};
+        };
+        const double ns = 1e-6;                                // in ms
+        call("set_level", Json{{"pin", "I1"}, {"field", "TerminationMode"}, {"value", "HighZ"}});   // undriven differs from 0
+        call("select", kv("name", "TDC_M20_2"));
+        const double t0 = changes(call("timeline"), 1, 0).at(0).first;   // I1 rises at the start of v6
+        const std::string rev0 = call("timeline").str("rev");
+        CHECK(call("summary").str("wave_rev") == rev0, "the page can tell a waveform is current");
+        call("set_edge", edge("Data", "3 ns"));
+        CHECK(call("summary").str("wave_rev") != rev0, "an edit makes the waveform out of date");
+        auto c = changes(call("timeline"), 1, t0);
+        CHECK(close_to(c.at(0).first, t0 + 3 * ns, 1e-9), "Data moves the edge: %g", (c.at(0).first - t0) / ns);
+
+        call("edit_vector", cell(7, "pin:I1", "X"));           // v6 lasts 100 cycles of 10 ns
+        call("set_edge", edge("Off", "4 ns"));
+        c = changes(call("timeline"), 1, t0);
+        CHECK(close_to(c.at(1).first, t0 + 1004 * ns, 1e-9), "Off ends the drive: %g", (c.at(1).first - t0) / ns);
+
+        call("set_edge", edge("On", "6 ns"));                  // v8 drives again after 99 cycles of v7
+        c = changes(call("timeline"), 1, t0);
+        CHECK(close_to(c.at(2).first, t0 + 1996 * ns, 1e-9), "On delays the data: %g", (c.at(2).first - t0) / ns);
+        call("revert");
+
+        call("add_edge", Json{{"timeset", "ten_ns"}, {"pin", "I1"}});
+        call("set_edge", edge("format", "RL", "I1"));
+        call("set_edge", edge("Return", "7 ns", "I1"));
+        c = changes(call("timeline"), 1, t0);
+        CHECK(close_to(c.at(1).first - c.at(0).first, 4 * ns, 1e-9), "RL width Data..Return: %g", (c.at(1).first - c.at(0).first) / ns);
+        call("set_edge", edge("Return", "9 ns", "I1"));
+        c = changes(call("timeline"), 1, t0);
+        CHECK(close_to(c.at(1).first - c.at(0).first, 6 * ns, 1e-9), "Return moves the fall: %g", (c.at(1).first - c.at(0).first) / ns);
+        call("remove_edge", Json{{"timeset", "ten_ns"}, {"pin", "I1"}});
+
+        {
+            const Json tl_lanes = call("timeline");
+            CHECK(tl_lanes["lanes"].size() == 4 && tl_lanes.number("t_end", 0) > 0, "one lane per pin");
+            const Json& i1 = tl_lanes["lanes"].items()[1];
+            CHECK(i1.str("name") == "I1" && close_to(i1.number("lo", -1), 0, 1e-12) && close_to(i1.number("hi", -1), 2.5, 1e-12),
+                  "limits from the levels: %g %g", i1.number("lo", -1), i1.number("hi", -1));
+            double top = 0;
+            for (auto& v : i1["v"].items()) top = v.as_number() > top ? v.as_number() : top;
+            CHECK(close_to(top, 2.25, 1e-12), "lane in volts: %g", top);   // Vih = 0.9*DC.VDD, Voh = DC.VDD = 2.5 V
+            CHECK(i1.str("note").rfind("ch1", 0) == 0, "lane note %s", i1.str("note").c_str());
+        }
+        auto swing = [&changes, t0] { const auto x = changes(call("timeline"), 1, t0); return x.at(0).second - x.at(1).second; };
+        call("set_level", Json{{"pin", "I1"}, {"field", "Vih"}, {"value", "1 V"}});
+        const double one = swing();
+        call("set_level", Json{{"pin", "I1"}, {"field", "Vih"}, {"value", "2 V"}});
+        CHECK(close_to(swing(), 2 * one, 1e-9), "Vih scales the trace: %g %g", one, swing());
+
+        call("set_spec_text", Json{{"key", "DC.VDD"}, {"field", "definition"}, {"value", "2 V"}});
+        Json tl2 = call("timeline");
+        CHECK(tl2["channels"].items()[3].str("name").find("\xE2\x80\xA6" "2 V") != std::string::npos, "spec reaches the levels: %s", tl2["channels"].items()[3].str("name").c_str());
+        call("set_pin", Json{{"pin", "I1"}, {"field", "channel"}, {"value", "31"}});
+        tl2 = call("timeline");
+        CHECK(tl2["channels"].items()[1].str("name").find("ch31") != std::string::npos, "pin map reaches the trace: %s", tl2["channels"].items()[1].str("name").c_str());
+    }
+
+    std::printf("one-click rows and renames\n");
+    {
+        auto has_row = [](const char* method, const char* field, const std::string& value) {
+            const Json table = call(method);
+            for (auto& r : table["rows"].items()) if (r.str(field) == value) return true;
+            return false;
+        };
+        call("select", kv("name", "TDC_M20_2"));
+
+        const Json pin1 = call("add_pin");
+        CHECK(pin1.str("pin") == "Pin1" && pin1.integer("channel", -1) >= 0, "new pin on a free channel: %s", pin1.dump().c_str());
+        call("set_pin", Json{{"pin", "Pin1"}, {"field", "pin"}, {"value", "Q1"}});
+        CHECK(has_row("pins", "pin", "Q1") && !has_row("pins", "pin", "Pin1"), "pin renamed");
+        call("set_pin", Json{{"pin", "Q1"}, {"field", "pin"}, {"value", "I0"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "existing pin name refused");
+        call("set_pin", Json{{"pin", "Q1"}, {"field", "pin"}, {"value", "AllPins"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "group name refused");
+        call("remove_pin", kv("pin", "Q1"));
+
+        call("set_pin", Json{{"pin", "I3"}, {"field", "pin"}, {"value", "CLK"}});
+        CHECK(call("vectors").str("pins") == "I0 I1 I2 CLK", "rename reaches the pattern: %s", call("vectors").str("pins").c_str());
+        CHECK(read(level_sheet).find("pin=\"CLK\"") != std::string::npos && read(pinmap).find("<PinReference pin=\"CLK\"") != std::string::npos &&
+              read(pinmap).find("<Connection pin=\"CLK\"") != std::string::npos, "rename reaches the sheets");
+        CHECK(!call("vectors")["modified"].as_bool(), "rename is saved");
+        call("select", kv("name", "TDC"));
+        CHECK(call("vectors").str("pins").find("I3") == std::string::npos, "every pattern follows");
+        call("select", kv("name", "TDC_M20_2"));
+        call("edit_vector", cell(1, "comment", "draft"));
+        call("set_pin", Json{{"pin", "CLK"}, {"field", "pin"}, {"value", "I3"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "unsaved edits block a rename");
+        call("revert");
+        call("set_pin", Json{{"pin", "CLK"}, {"field", "pin"}, {"value", "I3"}});
+
+        call("set_period", Json{{"name", "ten_ns"}, {"field", "name"}, {"value", "fast"}});
+        CHECK(call("vectors")["rows"].items()[0].str("timeset") == "fast", "timeset rename reaches the pattern");
+        CHECK(read(timing).find("<TimeSet name=\"fast\">") != std::string::npos, "timeset rename reaches the sheet");
+        call("set_period", Json{{"name", "fast"}, {"field", "name"}, {"value", "ten_us"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "existing timeset name refused");
+        call("set_period", Json{{"name", "fast"}, {"field", "name"}, {"value", "ten_ns"}});
+
+        CHECK(call("add_timeset", kv("copy_of", "ten_ns")).str("name") == "Timeset1", "new timeset");
+        CHECK(call("add_timeset").str("name") == "Timeset2", "next free name, a copy of the last");
+        call("remove_timeset", kv("name", "Timeset2"));
+        const Json added_edge = call("add_edge", kv("timeset", "Timeset1"));
+        CHECK(added_edge.str("pin") == "I0", "first pin without an entry: %s", added_edge.dump().c_str());
+        call("set_edge", Json{{"timeset", "Timeset1"}, {"pin", "I0"}, {"field", "pin"}, {"value", "I1"}});
+        call("set_edge", Json{{"timeset", "Timeset1"}, {"pin", "I1"}, {"field", "pin"}, {"value", "AllPins"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "pin already in the timeset refused");
+        call("set_edge", Json{{"timeset", "Timeset1"}, {"pin", "I1"}, {"field", "pin"}, {"value", "nope"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "unknown pin refused");
+        call("remove_edge", Json{{"timeset", "Timeset1"}, {"pin", "I1"}});
+        call("remove_timeset", kv("name", "Timeset1"));
+
+        const Json lv_added = call("add_level");
+        CHECK(lv_added.str("pin") == "I4", "first pin without levels: %s", lv_added.dump().c_str());
+        {
+            const Json table = call("levels");
+            CHECK(table["rows"].items().back().str("pin") == "I4", "a new level is the last row");
+        }
+        call("set_level", Json{{"pin", "I4"}, {"field", "pin"}, {"value", "I5"}});
+        CHECK(has_row("levels", "pin", "I5"), "level row moved");
+        call("set_level", Json{{"pin", "I5"}, {"field", "pin"}, {"value", "I0"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "pin with levels refused");
+        call("remove_level", kv("pin", "I5"));
+    }
 
     std::printf("restore\n");
     call("restore_sheets");
@@ -556,6 +736,94 @@ int main(int argc, char** argv)
     CHECK(rc == DM_E_BAD_ARGS, "nothing left to undo");
     call("revert");
 
+    std::printf("NI vector syntax\n");
+    {
+        auto issue_text = [] {
+            const Json table = call("vectors");
+            std::string all;
+            for (auto& i : table["issues"].items()) all += i.str("text") + "\n";
+            return all;
+        };
+        auto refused = [&](const std::string& text, const char* why) {
+            call("edit_vector", cell(5, "instruction", text), &rc);
+            Json err = call("edit_vector", cell(5, "instruction", text), &rc);
+            CHECK(rc == DM_E_BAD_ARGS && err.str("error").find(why) != std::string::npos, "%s -> %s", text.c_str(), err.str("error").c_str());
+        };
+        // every pattern of the project is valid except the end_loop label the analysis warns about
+        const Json pattern_list = call("list_patterns");
+        std::string bad;
+        for (auto& item : pattern_list["patterns"].items()) {
+            call("select", kv("name", item.str("value")));
+            const Json table = call("vectors");
+            for (auto& i : table["issues"].items())
+                if (i["error"].as_bool()) bad += item.str("value") + " v" + std::to_string(i.integer("v", -1)) + ": " + i.str("text") + "\n";
+        }
+        std::printf("%s", bad.c_str());
+        CHECK(bad.find("TDC_Mode3 v15") != std::string::npos, "the known bad end_loop is an error");
+        call("select", kv("name", "TDC_M20_2"));
+        CHECK(call("vectors")["rows"].items()[3].str("instruction") == "match", "flag 0x20 is match");
+
+        // opcodes of the language: range, arguments, conditions
+        refused("repeat(65536)", "65535");
+        refused("repeat(reg16)", "reg15");
+        refused("set_loop()", "65535");
+        refused("halt(1)", "没有参数");
+        refused("repeat", "需要参数");
+        refused("repeat(5, match", "括号");
+        refused("repeat(5),", "空的");
+        refused("repeat(5), set_loop(2)", "只能有一个");
+        refused("jump_if(ready, WaitForBusy)", "条件");
+        refused("jump_if(seqflag4, WaitForBusy)", "条件");
+        refused("jump_if(!matched)", "写法");
+        refused("jump_if(!matched, NoSuchLabel)", "没有标签");
+        refused("whatever", "不认识");
+        // valid in the language, no known encoding: said so, nothing written
+        for (const char* text : {"jump(WaitForBusy)", "call(WaitForBusy)", "return", "capture", "repeat(reg3)",
+                                 "jump_if(failed, WaitForBusy)", "jump_if(!seqflag1, WaitForBusy)", "jump_if(trig2, WaitForBusy)"})
+            refused(text, "合法写法");
+        // match combines with a flow opcode, as in the manual's examples
+        call("edit_vector", cell(5, "instruction", "repeat(80), match"));
+        CHECK(call("vectors")["rows"].items()[5].str("instruction") == "repeat(80), match", "repeat + match");
+        call("edit_vector", cell(5, "instruction", "match, repeat(80)"));
+        CHECK(call("vectors")["rows"].items()[5].str("instruction") == "repeat(80), match", "any order");
+        CHECK(issue_text().find("没有比较状态") != std::string::npos, "match without a compare state: %s", issue_text().c_str());
+        call("revert");
+
+        // names
+        call("edit_vector", cell(5, "label", "halt"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "reserved label refused");
+        call("edit_vector", cell(5, "label", "reg15"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "reserved register label refused");
+        call("edit_vector", cell(5, "label", "1abc"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "label starting with a digit refused");
+        call("edit_vector", cell(5, "label", "中文"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "label is ASCII");
+        call("pattern_new", kv("name", "match"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "reserved pattern name refused");
+        call("add_timeset", Json{{"name", "timeset"}, {"copy_of", "ten_ns"}}, &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "reserved timeset name refused");
+
+        // the pattern as a whole
+        CHECK(issue_text().empty(), "clean pattern: %s", issue_text().c_str());
+        const int last = int(call("vectors")["rows"].size()) - 1;
+        call("edit_vector", cell(last, "instruction", ""));
+        CHECK(issue_text().find("halt") != std::string::npos, "last vector must halt");
+        call("vector_undo");
+        call("edit_vector", cell(8, "instruction", ""));         // an end_loop goes
+        CHECK(issue_text().find("没有对应的 end_loop") != std::string::npos, "unclosed loop: %s", issue_text().c_str());
+        call("vector_undo");
+        call("edit_vector", cell(9, "instruction", "end_loop(WaitForBusy)"));
+        CHECK(issue_text().find("没有对应的 set_loop") != std::string::npos, "end_loop alone: %s", issue_text().c_str());
+        call("vector_undo");
+        call("edit_vector", cell(15, "instruction", "jump_if(!matched, ReadTDC)"));
+        CHECK(issue_text().find("80") != std::string::npos, "matched needs a match 80 cycles back: %s", issue_text().c_str());
+        CHECK(issue_text().find("比较状态") == std::string::npos, "no match written here: %s", issue_text().c_str());
+        call("edit_vector", cell(14, "instruction", "repeat(96), match"));
+        CHECK(issue_text().find("80") == std::string::npos, "the match is 80 cycles back: %s", issue_text().c_str());
+        call("revert");
+        CHECK(issue_text().empty(), "clean again");
+    }
+
     std::printf("new project\n");
     call("project_new", kv("name", "Fresh"));
     CHECK(call("info").str("current") == "main", "new project opens its pattern");
@@ -574,6 +842,24 @@ int main(int argc, char** argv)
     call("pattern_new", kv("name", "second"), &rc);
     CHECK(rc == DM_E_BAD_ARGS, "duplicate pattern refused");
     call("edit_vector", cell(0, "pin:I0", "1"));
+
+    {
+        const Json tree = call("pattern_tree");
+        CHECK(tree.str("root") == "Fresh" && tree.str("current") == "second" && tree["items"].size() == 4, "tree %s", tree.dump().c_str());
+        call("pattern_delete", kv("name", "GEN_C"));           // with its generator sidecar
+        call("pattern_delete", kv("name", "GEN_N"));
+        call("pattern_delete", kv("name", "main"));
+        CHECK(call("info").str("current") == "second" && call("pattern_tree")["items"].size() == 1, "other patterns deleted");
+        CHECK(!fs::exists(tmp / "w" / "projects" / "Fresh" / "Patterns" / "main.digipat"), "file gone");
+        CHECK(fs::exists(tmp / "w" / "backup" / "Fresh" / "Patterns" / "main.digipat"), "copy kept");
+        call("pattern_delete", kv("name", "second"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "the last pattern stays");
+        call("pattern_delete", kv("name", "nope"), &rc);
+        CHECK(rc == DM_E_BAD_ARGS, "unknown pattern refused");
+        call("pattern_new", kv("name", "third"));
+        call("pattern_delete", kv("name", "third"));
+        CHECK(call("info").str("current") == "second", "the current pattern moves to a neighbour");
+    }
 
     std::printf("export plugin\n");
     call("export_plugin", Json{{"id", "my_task"}, {"name", "我的任务"}}, &rc);

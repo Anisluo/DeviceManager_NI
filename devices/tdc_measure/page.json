@@ -1326,7 +1326,8 @@
        ],
        "write_many": "edit_vectors",
        "undo": "vector_undo",
-       "height": 720
+       "height": 720,
+       "issues_field": "issues"
       }
      ]
     },
@@ -1628,7 +1629,9 @@
        ],
        "write": "set_level",
        "also": [
-        "chk"
+        "chk",
+        "tl",
+        "sum"
        ],
        "columns": [
         {
@@ -1750,7 +1753,9 @@
        ],
        "write": "set_pin",
        "also": [
-        "chk"
+        "chk",
+        "tl",
+        "sum"
        ],
        "columns": [
         {

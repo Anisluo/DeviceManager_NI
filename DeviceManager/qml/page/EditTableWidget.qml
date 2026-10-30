@@ -11,7 +11,13 @@ import "../js/Format.js" as Fmt
 //   also: ["tl"],     sources to refresh after a write,
 //   columns: [{ field, label, width, name, mono, editor: "text"|"combo", options, options_field, readonly_if, row_header }],
 //   pin_columns: { field: "pin_list", states: "states", after: 2 },
-//   row_actions: [{ label, method, range, at: "top"|"bottom" }] }
+//   row_actions: [{ label, method, range, at: "top"|"bottom", menu_only }],
+//   delete_method: the Delete key removes the selected rows with this method instead of clearing cells,
+//   follow_new: a row added at the end gets selected and scrolled into view,
+//   issues_field: list of { v, error, text } in the source: shown under the table, a click goes to
+//   row v, and the row header is tinted,
+//   add: { label, method, keys: ["timeset"] } button under the table: passes those fields of the
+//   selected row, and selects the row whose key fields the method returns }
 // Each edit calls write with the key fields plus { field: <column name or field>, value: <text> };
 // a pin column writes field "pin:<pin>". A row action runs on every selected row, or once with
 // { count } when `range` is set.
@@ -36,12 +42,22 @@ ColumnLayout {
     property int editRow: -1                // the cell being edited
     property int editCol: -1
     property string editSeed: ""            // first character typed, replaces the cell
+    property var pendingKey: null           // key fields of the row just added
     property var closeEditor: null          // commits the open editor; the FocusScope keeps focus inside it
     readonly property var editColumn: columns[editCol] || ({})   // survives editCol going to -1 first
     readonly property int rowH: 30
     readonly property int headerH: 34
     readonly property var pins: spec.pin_columns ? (Fmt.field(sourceData, spec.pin_columns.field) || []) : []
     readonly property var actions: spec.row_actions || []
+    readonly property var issues: spec.issues_field ? (Fmt.field(sourceData, spec.issues_field) || []) : []
+    readonly property int errorCount: issues.filter(x => x.error).length
+    readonly property var issueByRow: {
+        const by = {}
+        for (const x of issues) if (x.v >= 0 && !by[x.v]) by[x.v] = x.error ? "error" : "warning"
+        for (const x of issues) if (x.v >= 0 && x.error) by[x.v] = "error"
+        return by
+    }
+    readonly property var barActions: actions.filter(a => !a.menu_only)
     readonly property var columns: {
         const base = (spec.columns || []).slice()
         if (!spec.pin_columns) return base
@@ -71,9 +87,18 @@ ColumnLayout {
             if (rev === w.rev) return
             w.rev = rev
             const y = list.contentY, resized = r.length !== w.rows.length
+            const added = w.spec.follow_new && !w.pendingKey && w.rows.length > 0 && r.length > w.rows.length
             w.sourceData = data
             w.rows = r
+            if (w.curRow >= r.length) { w.curRow = r.length - 1; w.ancRow = w.curRow }
+            if (w.ancRow >= r.length) w.ancRow = r.length - 1
             if (resized) Qt.callLater(() => { list.contentY = y })   // a new row count resets the view
+            if (added) Qt.callLater(() => w.select(r.length - 1, w.firstEditable(), false))
+            if (w.pendingKey) {
+                const key = w.pendingKey
+                const at = r.findIndex(row => (w.spec.key || []).every(k => row[k] === key[k]))
+                if (at >= 0) { w.pendingKey = null; Qt.callLater(() => w.select(at, w.firstEditable(), false)) }
+            }
         }
     }
 
@@ -94,6 +119,7 @@ ColumnLayout {
         const col = columns[c], row = rows[r]
         return !!col && !!row && !!col.editor && !(col.readonly_if && Fmt.field(row, col.readonly_if))
     }
+    function firstEditable() { return Math.max(0, columns.findIndex(c => c.editor)) }
     function selected(r, c) { return curRow >= 0 && r >= selTop && r <= selBottom && c >= selLeft && c <= selRight }
 
     function select(r, c, extend) {
@@ -187,6 +213,17 @@ ColumnLayout {
         say("")
         next(0)
     }
+    function addRow() {
+        commitEdit()
+        const add = spec.add, args = {}
+        if (curRow >= 0) for (const k of add.keys || []) args[k] = Fmt.field(rows[curRow], k)
+        say("")
+        ctx.device.call(add.method, args, (ok, res) => {
+            if (ok) pendingKey = res
+            else failed(add.method, res)
+            refresh()
+        })
+    }
     function undo() {
         commitEdit()
         if (!spec.undo) { say("这张表回车即写入文件，可用“还原工程文件”恢复"); return }
@@ -248,10 +285,10 @@ ColumnLayout {
     }
 
     Row {
-        visible: w.actions.length > 0 || !!w.spec.undo
+        visible: w.barActions.length > 0 || !!w.spec.undo
         spacing: 4
         Repeater {
-            model: w.actions
+            model: w.barActions
             delegate: DmButton {
                 required property var modelData
                 compact: true
@@ -293,7 +330,9 @@ ColumnLayout {
             else if (e.key === Qt.Key_Backtab) w.select(w.curRow, Math.max(w.curCol - 1, 0), false)
             else if (e.key === Qt.Key_PageDown) w.select(Math.min(w.curRow + 20, w.rows.length - 1), w.curCol, shift)
             else if (e.key === Qt.Key_PageUp) w.select(Math.max(w.curRow - 20, 0), w.curCol, shift)
-            else if (e.key === Qt.Key_Delete || e.key === Qt.Key_Backspace) w.clearSelection()
+            else if (w.spec.delete_method && (e.key === Qt.Key_Delete || e.key === Qt.Key_Backspace)) {
+                if (e.key === Qt.Key_Delete) w.runAction({ method: w.spec.delete_method })
+            } else if (e.key === Qt.Key_Delete || e.key === Qt.Key_Backspace) w.clearSelection()
             else if (e.key === Qt.Key_F2 || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
                 if (col.editor === "state") w.select(w.curRow + 1, w.curCol, false)
                 else w.startEdit("")
@@ -380,6 +419,7 @@ ColumnLayout {
                             width: w.widthOf(col)
                             height: w.rowH
                             color: w.selected(rowItem.index, index) ? Theme.accentSoft
+                                 : col.row_header && w.issueByRow[rowItem.index] ? Theme.toneSoft(w.issueByRow[rowItem.index])
                                  : col.row_header ? Theme.surfaceAlt : "transparent"
                             Text {
                                 anchors.fill: parent
@@ -635,6 +675,54 @@ ColumnLayout {
                     }
                 }
             }
+        }
+    }
+
+    DmButton {
+        id: addButton
+        visible: !!w.spec.add
+        Layout.topMargin: 6
+        Layout.preferredWidth: Math.max(120, addButton.implicitWidth)
+        text: w.spec.add ? w.spec.add.label : ""
+        onClicked: w.addRow()
+    }
+    ColumnLayout {
+        visible: !!w.spec.issues_field && w.rows.length > 0
+        Layout.fillWidth: true
+        Layout.topMargin: 4
+        spacing: 2
+        Text {
+            text: w.issues.length === 0 ? "语法检查通过（NI 向量语法）"
+                : "语法检查：" + w.errorCount + " 个错误，" + (w.issues.length - w.errorCount) + " 个提醒"
+            color: w.errorCount ? Theme.error : w.issues.length ? Theme.toneColor("warning") : Theme.toneColor("ok")
+            font.family: Theme.sans
+            font.pixelSize: Theme.fontSm
+            font.weight: Font.DemiBold
+        }
+        Repeater {
+            model: w.issues.slice(0, 12)
+            delegate: Text {
+                required property var modelData
+                Layout.fillWidth: true
+                text: (modelData.v >= 0 ? "第 " + modelData.v + " 行：" : "") + modelData.text
+                wrapMode: Text.Wrap
+                color: modelData.error ? Theme.error : Theme.toneColor("warning")
+                font.family: Theme.sans
+                font.pixelSize: Theme.fontSm
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: parent.modelData.v >= 0
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: w.select(parent.modelData.v, w.firstEditable(), false)
+                }
+            }
+        }
+        Text {
+            visible: w.issues.length > 12
+            text: "还有 " + (w.issues.length - 12) + " 项"
+            color: Theme.textMuted
+            font.family: Theme.sans
+            font.pixelSize: Theme.fontSm
         }
     }
 

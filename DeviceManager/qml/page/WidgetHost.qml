@@ -26,6 +26,8 @@ Loader {
         "sweep":   sweepComp,
         "text":    textComp,
         "scope":   scopeComp,
+        "logic":   logicComp,
+        "tree":    treeComp,
         "params":  paramsComp
     })
 
@@ -46,6 +48,8 @@ Loader {
     Component { id: sweepComp;   SweepWidget   { spec: host.spec; ctx: host.pageCtx } }
     Component { id: textComp;    TextWidget    { spec: host.spec; ctx: host.pageCtx } }
     Component { id: scopeComp;   ScopeWidget   { spec: host.spec; ctx: host.pageCtx } }
+    Component { id: logicComp;   LogicWidget   { spec: host.spec; ctx: host.pageCtx } }
+    Component { id: treeComp;    TreeWidget    { spec: host.spec; ctx: host.pageCtx } }
     Component { id: paramsComp;  ParamsWidget  { spec: host.spec; ctx: host.pageCtx } }
     Component { id: placeholderComp; PlaceholderWidget { spec: host.spec } }
 }

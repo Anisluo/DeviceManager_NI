@@ -76,11 +76,11 @@ tests/             python -m unittest discover -s devices/ni_digital/tests
 
 ## 页面
 
-标签页：概览（仪器、引脚状态、电平、静态驱动）· PPMU（FV/FI、读数和趋势）· 开短路/漏电 · SWD（连接、存储器、内核）· 图形（工程、图形、burst、失败计数）· Shmoo（VIH × SWCLK）· 工程 · 引脚映射 · 规格 · 电平 · 时序 · 向量 Vector。
+标签页：PPMU（FV/FI、读数和趋势）· 引脚映射 · 规格 · 电平 · 时序 · 向量 Vector。开短路、SWD、Shmoo 等方法仍在驱动里，序列和脚本照常调用，只是页面上不再显示。
 
 ## 图形工程编辑器
 
-“工程”之后的标签按 Digital Pattern Editor 的文档组织：引脚映射、规格、电平、时序、向量。都是电子表格，操作和 Excel 一样：
+PPMU 之后的标签按 Digital Pattern Editor 的文档组织：引脚映射、规格、电平、时序、向量。都是电子表格，操作和 Excel 一样：
 拖动或 Shift 选区，打字改值，Ctrl+C / Ctrl+V 可与 Excel 互贴，右键拖动框选后批量修改，图形可 Ctrl+Z 撤销。可以新建或打开工程，
 单次试跑，然后**导出为插件**。
 
@@ -91,6 +91,12 @@ tests/             python -m unittest discover -s devices/ni_digital/tests
   `.digiproj`，Digital Pattern Editor 可以打开其中的单个表，但不能当工程打开。
 - 导出生成 `devices/<id>/`：运行器 DLL 的副本（改名为 `<id>.dll`）、`plugin.json`、`page.json`、`README.md` 和工程副本，
   不需要编译器。点“重新扫描插件”后出现在侧栏“插件”里，自动用检测到的 6571 运行。再次导出同一个 id 会替换它。
+- 向量页左侧是工程树，列出工程的全部向量表（`.digipat`）：点击切换，“添加”输入名字后回车创建，Delete 或“删除”确认后删除，删除前在 `_work/backup/` 留一份，工程至少保留一张。
+- 向量表的修改直接写入文件，Ctrl+Z 撤销也一样。页面上不做工程切换、新建、运行和导出，也不增减引脚列；`pe.project_new`、`pe.burst`、`pe.export_plugin` 等方法还在，可以在脚本里用。
+- **仿真波形**（向量页和时序页）点“仿真”才计算和刷新，之后改了配置会提示重新仿真。波形由向量算出：`Period` 和公式来自规格，`On` 是从不驱动转为驱动的时刻，`Data` 是数据沿（不早于 On），
+  `Return` 是 RL / RH / SBC 回到静止电平的时刻，`Off` 是驱动转为 X 或比较时停止驱动的时刻。1 / 0 画在 Vih / Vil，H / L 画在
+  Voh / Vol，不驱动时画在 Vterm（端接为 Vterm）或 Vil、Vih 中点。这是按时序表的计算结果，不是采集到的真实波形。
+- 引脚映射、规格、电平、时序都在表里改，每张表只有一个添加按钮，选中行按 Delete 删除；“添加引脚条目”加到选中行所在的时序集。规格改名时公式一起改，引脚和时序集改名时时序、电平和图形一起改；还在使用的规格、引脚、时序集不能删。这些表写入即生效、不能 Ctrl+Z。
 - 这些标签由 `tools/sync_editor_page.py` 从 `tdc_measure/page.json` 生成（规格表写在脚本里），改那边的页面后重新运行一次。
 
 相关序列：`sequences/m0_bringup.py`（开短路 → 漏电 → SWD → SRAM march → 基准 trim 闭环，生成逐项测试记录）、`sequences/swd_vdd_shmoo.py`。

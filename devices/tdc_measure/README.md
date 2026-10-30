@@ -106,6 +106,20 @@ CLK 的归零格式按 Digital Pattern Editor 保存的写法写成 `<ReturnToLo
 
 编译格式是从工程文件解析出来的，不是 NI 公开的格式：重写后的图形在真机上第一次用，先单次试跑。
 
+## 向量语法校验
+
+规则来自 [NI-Digital Pattern User Manual](https://www.ni.com/docs/en-US/bundle/ni-digital-pattern/page/opcodes.html)（`src/syntax.*`）。
+
+- **输入时拒绝**：opcode 名称和参数（`repeat`、`set_loop` 为 1…65535 或 `reg0`…`reg15`）、`jump_if` 条件（`[!]matched`、`[!]failed`、
+  `[!]seqflag0…3`、`[!]trig0…3`）、标签必须存在、引脚状态 `0 1 L H X M V D E`；名称必须以字母或下划线开头、只含 ASCII 字母数字下划线、
+  不能是保留字、标签不能重复。
+- **表格下方列出**：最后一个向量必须是 `halt`、`set_loop` 与 `end_loop` 配对且标签位置正确（错误）；循环嵌套超过 8 层、`matched`
+  读取的正好 80 个周期前的向量没有 `match`、`match` 向量没有比较状态（提醒，语法上合法）。向量的 `match` 和 `jump_if` 的自循环
+  按手册的 match pipeline 处理。
+
+`.digipat` 的编码是从工程文件解析的，不是 NI 公开格式：`0x20` 按 `match` 显示是推断（工程里所有比较向量都带它，反之亦然）。
+`jump`、`call`、`capture` 等语言合法但工程里没有样例的 opcode，编码未确认，校验时明确提示不能写入，要用 Digital Pattern Editor 编译。
+
 ## 编辑工程文件
 
 时序集、电平和引脚映射回车后直接写回工程里的 `.digitiming` / `.digilevels` / `.pinmap`（`src/sheets.*`），
@@ -113,12 +127,13 @@ CLK 的归零格式按 Digital Pattern Editor 保存的写法写成 `<ReturnToLo
 公式，写入前先求值。下一次运行时重新把工程加载进 6571；图形运行中不能修改。
 
 被图形用到的时序集、引脚不能删除；第一次修改某个文件时原文件存到 `_work/backup/`，“还原工程文件”放回去。
-时序集和引脚目前不能改名。
+引脚和时序集改名时，时序表、电平表和所有用到它的图形一起改，有未保存修改的图形要先保存。
 
 ## 解码规则（Digital Pattern Editor 21.8 编译格式）
 
 - 引脚状态：每个引脚 4 位，引脚 i 在第 i/2 个字节，偶数引脚在低 4 位；取值同 `nidigital.PinState`：
   `0 1 L(3) H(4) X(5) M V D E`。
+- `jump_if` 的标志 `0x28` 加操作数位 15 就是 `!matched`（比较不匹配时跳转），显示和输入都用这个写法。工程里没有别的条件，其他标志按数字显示，如 `jump_if(0x28, 标签)`。
 - 指令：位 31..28 操作码（0 普通、1 `repeat`、4 `set_loop`、5 `end_loop`、7 `jump_if`、F `halt`），
   位 27..23 时序集序号，位 22..16 标志，位 15..0 操作数（次数或标签序号）。
 

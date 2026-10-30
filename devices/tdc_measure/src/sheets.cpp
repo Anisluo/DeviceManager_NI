@@ -2,6 +2,7 @@
 #include "util.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <stdexcept>
 #include <utility>
@@ -223,6 +224,18 @@ void timing_remove_pin(std::string& x, const std::string& timeset, const std::st
     erase_lines(x, need(find_pin_edge(x, ts, pin), timeset + " 里 " + pin + " 的边沿"));
 }
 
+void timing_rename_pin(std::string& x, const std::string& timeset, const std::string& pin, const std::string& to)
+{
+    const Elem ts = find_timeset(x, timeset);
+    if (find_pin_edge(x, ts, to)) throw std::invalid_argument(timeset + " 里已有 " + to);
+    set_attr(x, need(find_pin_edge(x, ts, pin), timeset + " 里 " + pin + " 的边沿"), "pin", to);
+}
+
+void timing_rename_timeset(std::string& x, const std::string& name, const std::string& to)
+{
+    set_attr(x, find_timeset(x, name), "name", to);
+}
+
 void timing_add_timeset(std::string& x, const std::string& name, const std::string& copy_of)
 {
     if (find_elem(x, "TimeSet", 0, x.size(), "name", name)) throw std::invalid_argument("已有时序集 " + name);
@@ -260,7 +273,14 @@ void levels_add(std::string& x, const std::string& pin, const std::string& copy_
     std::string block = x.substr(from.begin, from.end - from.begin);
     const std::string attr = "pin=\"" + xml_escape(copy_of) + "\"";
     block.replace(block.find(attr), attr.size(), "pin=\"" + xml_escape(pin) + "\"");
-    x.insert(from.end, eol_of(x) + indent_at(x, from.begin) + block);
+    const std::string lines = indent_at(x, from.begin) + block + eol_of(x);     // at the end, as the table shows it
+    insert_before_close(x, need(find_elem(x, "DigitalPinLevelSets", 0, x.size()), "DigitalPinLevelSets"), lines);
+}
+
+void levels_rename(std::string& x, const std::string& pin, const std::string& to)
+{
+    if (find_level(x, to)) throw std::invalid_argument(to + " 已有电平");
+    set_attr(x, need(find_level(x, pin), pin + " 的电平"), "pin", to);
 }
 
 void levels_remove(std::string& x, const std::string& pin) { erase_lines(x, need(find_level(x, pin), pin + " 的电平")); }
@@ -310,6 +330,33 @@ void specs_add(std::string& x, const std::string& section, const std::string& sy
 void specs_remove(std::string& x, const std::string& section, const std::string& symbol)
 {
     erase_lines(x, find_formula(x, section, symbol));
+    const Elem s = need(find_section(x, section), "规格分组 " + section);
+    if (!find_elem(x, "f:Formula", s.inner, s.inner_end)) erase_lines(x, s);
+}
+
+void specs_rename(std::string& x, const std::string& section, const std::string& symbol, const std::string& to)
+{
+    const Elem s = need(find_section(x, section), "规格分组 " + section);
+    if (find_elem(x, "f:Formula", s.inner, s.inner_end, "symbol", to)) throw std::invalid_argument("已有规格 " + section + "." + to);
+    set_attr(x, find_formula(x, section, symbol), "symbol", to);
+}
+
+// Next use of `key` at or after `from`, as a whole name; npos when none.
+static size_t next_symbol(const std::string& x, const std::string& key, size_t from)
+{
+    auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '.'; };
+    for (size_t at = x.find(key, from); at != npos; at = x.find(key, at + 1)) {
+        const size_t end = at + key.size();
+        if ((at == 0 || !word(x[at - 1])) && (end >= x.size() || !word(x[end]))) return at;
+    }
+    return npos;
+}
+
+bool has_symbol(const std::string& x, const std::string& key) { return next_symbol(x, key, 0) != npos; }
+
+void replace_symbol(std::string& x, const std::string& key, const std::string& to)
+{
+    for (size_t at = next_symbol(x, key, 0); at != npos; at = next_symbol(x, key, at + to.size())) x.replace(at, key.size(), to);
 }
 
 // =========================================================================== pin map
@@ -372,6 +419,18 @@ void pinmap_set_groups(std::string& x, const std::string& pin, const std::vector
         const std::string ind = indent_at(x, list.inner_end) + "\t";
         insert_before_close(x, list, ind + "<PinGroup name=\"" + xml_escape(name) + "\">" + eol + ind + "\t" + ref + eol + ind + "</PinGroup>" + eol);
     }
+}
+
+void replace_pin_attr(std::string& x, const std::string& pin, const std::string& to)
+{
+    const std::string from = " pin=\"" + xml_escape(pin) + "\"", into = " pin=\"" + xml_escape(to) + "\"";
+    for (size_t at = x.find(from); at != npos; at = x.find(from, at + into.size())) x.replace(at, from.size(), into);
+}
+
+void pinmap_rename_pin(std::string& x, const std::string& pin, const std::string& to)
+{
+    set_attr(x, need(find_elem(x, "DUTPin", 0, x.size(), "name", pin), "引脚 " + pin), "name", to);
+    replace_pin_attr(x, pin, to);
 }
 
 void pinmap_rename_instrument(std::string& x, const std::string& from, const std::string& to)

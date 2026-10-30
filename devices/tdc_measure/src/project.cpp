@@ -1,4 +1,5 @@
 #include "project.hpp"
+#include "syntax.hpp"
 #include "util.hpp"
 
 #include <algorithm>
@@ -321,43 +322,96 @@ void Pattern::set_instruction(size_t v, const std::string& raw)
         return unsigned(n);
     };
     const size_t fl = text.find('[');
-    if (fl != std::string::npos) {
+    if (fl != std::string::npos) {                       // flags with no known opcode, as shown
         const size_t x0 = text.find("0x", fl), x1 = text.find(']', fl);
         if (x0 == std::string::npos || x1 == std::string::npos) throw std::invalid_argument("指令 '" + raw + "' 的标志无效");
         flags = hex_of(text.substr(x0 + 2, x1 - x0 - 2));
         text = trim(text.substr(0, fl));
     }
-    const size_t lp = text.find('('), rp = text.rfind(')');
-    if (lp != std::string::npos && (rp == std::string::npos || rp < lp)) throw std::invalid_argument("指令 '" + raw + "' 缺少右括号");
-    const std::string name = text.substr(0, lp), arg = lp == std::string::npos ? "" : trim(text.substr(lp + 1, rp - lp - 1));
-    if (name == "repeat" || name == "set_loop") {
-        char* end = nullptr;
-        const long n = std::strtol(arg.c_str(), &end, 10);
-        if (arg.empty() || *end || n < 1 || n > COUNT_MAX) throw std::invalid_argument(name + " 的次数应在 1 … " + std::to_string(COUNT_MAX));
-        op = name == "repeat" ? 1 : 4;
-        operand = unsigned(n);
-    } else if (name == "end_loop") {
-        op = 5;
-        operand = unsigned(label_index(arg));
-    } else if (name == "jump_if") {
-        const size_t comma = arg.find(',');
-        if (comma == std::string::npos) throw std::invalid_argument("jump_if 的写法是 jump_if(0x28!, 标签)");
-        std::string cond = trim(arg.substr(0, comma));
-        const bool negate = !cond.empty() && cond.back() == '!';
-        if (negate) cond.pop_back();
-        if (cond.rfind("0x", 0) != 0) throw std::invalid_argument("jump_if 的写法是 jump_if(0x28!, 标签)");
-        op = 7;
-        flags = hex_of(cond.substr(2));
-        operand = unsigned(label_index(trim(arg.substr(comma + 1)))) | (negate ? 0x8000u : 0u);
-    } else if (name == "halt") {
-        op = 15;
-        operand = old.op == 15 ? old.operand : 0xF;
-    } else if (name.size() == 3 && name.rfind("op", 0) == 0 && arg.rfind("0x", 0) == 0) {      // as shown for unknown opcodes
-        char* end = nullptr;
-        op = unsigned(std::strtoul(name.substr(2).c_str(), &end, 16));
-        operand = unsigned(std::strtoul(arg.c_str() + 2, nullptr, 16)) & 0xFFFFu;
-    } else if (!name.empty()) {
-        throw std::invalid_argument("不认识的指令 '" + raw + "'，可用 repeat(n)、set_loop(n)、end_loop(标签)、jump_if(0x28!, 标签)、halt");
+    // "opcode, opcode": commas inside parentheses belong to the opcode
+    std::vector<std::string> parts;
+    int depth = 0;
+    std::string part;
+    for (char c : text) {
+        if (c == '(') ++depth;
+        if (c == ')') --depth;
+        if (c == ',' && depth == 0) { parts.push_back(trim(part)); part.clear(); }
+        else part += c;
+    }
+    if (depth != 0) throw std::invalid_argument("指令 '" + raw + "' 的括号不配对");
+    if (!trim(part).empty() || !parts.empty()) parts.push_back(trim(part));
+
+    bool flow = false;
+    auto one_flow = [&flow] {
+        if (flow) throw std::invalid_argument("一个向量上只能有一个 repeat、set_loop、end_loop、jump_if 或 halt");
+        flow = true;
+    };
+    auto not_encoded = [](const std::string& what) {
+        return std::invalid_argument(what + " 是 NI 合法写法，但这种编译格式的编码还没有确认，不能写入；需要时请用 Digital Pattern Editor 编译");
+    };
+    auto is_numbered = [](const std::string& s, const char* prefix, int count) {
+        for (int k = 0; k < count; ++k) if (s == prefix + std::to_string(k)) return true;
+        return false;
+    };
+    for (const std::string& piece : parts) {
+        if (piece.empty()) throw std::invalid_argument("指令 '" + raw + "' 里有空的 opcode");
+        const size_t lp = piece.find('(');
+        if (lp != std::string::npos && piece.back() != ')') throw std::invalid_argument("指令 '" + raw + "' 缺少右括号");
+        const std::string name = trim(piece.substr(0, lp));
+        const std::string arg = lp == std::string::npos ? "" : trim(piece.substr(lp + 1, piece.size() - lp - 2));
+        const bool has_args = lp != std::string::npos;
+        if (name == "match" || name == "halt") {
+            if (has_args) throw std::invalid_argument(name + " 没有参数");
+        } else if ((name == "repeat" || name == "set_loop" || name == "end_loop" || name == "jump_if") && !has_args) {
+            throw std::invalid_argument(name + " 需要参数");
+        }
+        if (name == "match") {
+            flags |= 0x20;
+        } else if (name == "repeat" || name == "set_loop") {
+            one_flow();
+            if (is_numbered(arg, "reg", 16)) throw not_encoded(name + "(" + arg + ")");
+            char* end = nullptr;
+            const long n = std::strtol(arg.c_str(), &end, 10);
+            if (arg.empty() || *end || n < 1 || n > COUNT_MAX)
+                throw std::invalid_argument(name + " 的参数应为 1 … " + std::to_string(COUNT_MAX) + " 或 reg0 … reg15");
+            op = name == "repeat" ? 1 : 4;
+            operand = unsigned(n);
+        } else if (name == "end_loop") {
+            one_flow();
+            op = 5;
+            operand = unsigned(label_index(arg));
+        } else if (name == "jump_if") {
+            one_flow();
+            const size_t comma = arg.find(',');
+            if (comma == std::string::npos) throw std::invalid_argument("jump_if 的写法是 jump_if(条件, 标签)，如 jump_if(!matched, 标签)");
+            std::string cond = trim(arg.substr(0, comma));
+            const std::string to = trim(arg.substr(comma + 1));
+            const std::string base = !cond.empty() && cond[0] == '!' ? cond.substr(1) : cond;
+            if (base == "failed" || base == "matched" || is_numbered(base, "seqflag", 4) || is_numbered(base, "trig", 4)) {
+                if (cond != "!matched") throw not_encoded("jump_if(" + cond + ", ...)");
+                cond = "0x28!";
+            }
+            const bool negate = !cond.empty() && cond.back() == '!';
+            if (negate) cond.pop_back();
+            if (cond.rfind("0x", 0) != 0)
+                throw std::invalid_argument("jump_if 的条件应为 [!]matched、[!]failed、[!]seqflag0…3 或 [!]trig0…3");
+            op = 7;
+            flags |= hex_of(cond.substr(2));
+            operand = unsigned(label_index(to)) | (negate ? 0x8000u : 0u);
+        } else if (name == "halt") {
+            one_flow();
+            op = 15;
+            operand = old.op == 15 ? old.operand : 0xF;
+        } else if (name.size() == 3 && name.rfind("op", 0) == 0 && arg.rfind("0x", 0) == 0) {  // as shown for unknown opcodes
+            one_flow();
+            char* end = nullptr;
+            op = unsigned(std::strtoul(name.substr(2).c_str(), &end, 16));
+            operand = unsigned(std::strtoul(arg.c_str() + 2, nullptr, 16)) & 0xFFFFu;
+        } else if (is_unencoded_opcode(name)) {
+            throw not_encoded(name);
+        } else {
+            throw std::invalid_argument("不认识的指令 '" + name + "'，可用 repeat(n)、set_loop(n)、end_loop(标签)、jump_if(!matched, 标签)、match、halt");
+        }
     }
     begin_edit();
     base_ins[v] = (uint32_t(op) << 28) | (uint32_t(old.timeset) << 23) | (uint32_t(flags) << 16) | operand;
@@ -396,7 +450,7 @@ void Pattern::set_label(size_t v, const std::string& raw)
         }
         return;
     }
-    if (!valid_name(label)) throw std::invalid_argument("标签 '" + label + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+    if (const std::string problem = identifier_problem(label); !problem.empty()) throw std::invalid_argument(problem);
     if (std::find(label_names.begin(), label_names.end(), label) != label_names.end())
         throw std::invalid_argument("已有标签 " + label);
     begin_edit();
@@ -445,6 +499,24 @@ void Pattern::remove_vector(size_t v)
         for (auto& at : *locs) if (size_t(at) > v) --at;
 }
 
+bool Pattern::rename_pin(const std::string& from, const std::string& to)
+{
+    const auto it = std::find(pins.begin(), pins.end(), from);
+    if (it == pins.end()) return false;
+    begin_edit();
+    *it = to;
+    return true;
+}
+
+bool Pattern::rename_timeset(const std::string& from, const std::string& to)
+{
+    const auto it = std::find(timesets.begin(), timesets.end(), from);
+    if (it == timesets.end()) return false;
+    begin_edit();
+    *it = to;
+    return true;
+}
+
 void Pattern::add_pin(const std::string& pin)
 {
     if (std::find(pins.begin(), pins.end(), pin) != pins.end()) throw std::invalid_argument("图形里已有引脚 " + pin);
@@ -467,7 +539,7 @@ void Pattern::remove_pin(const std::string& pin)
 
 void Pattern::clear(const std::string& label, const std::vector<std::string>& pin_list, const std::string& timeset)
 {
-    if (!valid_name(label)) throw std::invalid_argument("图形名 '" + label + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+    if (const std::string problem = identifier_problem(label); !problem.empty()) throw std::invalid_argument(problem);
     if (pin_list.empty()) throw std::invalid_argument("图形至少要有一个引脚");
     begin_edit();
     name = label;
@@ -522,6 +594,15 @@ bool Pattern::undo()
     if (tdms::Channel* group = tdms.channel("PinItem", "PinNameGroupIndex")) group->nums = std::move(s.group_index);
     ++revision;
     return true;
+}
+
+void Pattern::saved(const std::string& bytes)
+{
+    data = bytes;
+    edits.clear();
+    structural = false;
+    load();
+    ++revision;
 }
 
 void Pattern::commit(const std::string& bytes)
@@ -612,11 +693,18 @@ std::string Pattern::instruction_text(size_t i) const
     case 0: break;
     case 1: case 4: text = op_name(d.op) + "(" + std::to_string(d.operand) + ")"; break;
     case 5: text = "end_loop(" + label(d.operand) + ")"; break;
-    case 7: text = "jump_if(0x" + hex(d.flags, 2) + ((d.operand & 0x8000) ? "!" : "") + ", " + label(d.operand & 0x7FFF) + ")"; break;
+    case 7: {
+        // compare result of the vector: the only condition the project's patterns use
+        const bool not_matched = d.flags == 0x28 && (d.operand & 0x8000);
+        const std::string cond = not_matched ? "!matched" : "0x" + hex(d.flags, 2) + ((d.operand & 0x8000) ? "!" : "");
+        text = "jump_if(" + cond + ", " + label(d.operand & 0x7FFF) + ")";
+        break;
+    }
     case 15: text = "halt"; break;
     default: text = op_name(d.op) + "(0x" + hex(d.operand, 4) + ")";
     }
-    if (d.flags && d.op != 7) text = text.empty() ? "[flags 0x" + hex(d.flags, 2) + "]" : text + "  [flags 0x" + hex(d.flags, 2) + "]";
+    if (d.flags == 0x20 && d.op != 7) text = text.empty() ? "match" : text + ", match";
+    else if (d.flags && d.op != 7) text = text.empty() ? "[flags 0x" + hex(d.flags, 2) + "]" : text + "  [flags 0x" + hex(d.flags, 2) + "]";
     return text;
 }
 
@@ -827,15 +915,6 @@ RunResult Pattern::run(const TimingModel& tm, double busy_delay, std::mt19937* r
 
 namespace {
 
-double level_of(char c)
-{
-    switch (c) {
-    case '0': case 'L': return 0.0;
-    case '1': case 'H': return 1.0;
-    default: return 0.5;
-    }
-}
-
 // A drive state that the format turns into a pulse in every cycle.
 bool pulsed(const std::string& format, char c)
 {
@@ -851,9 +930,15 @@ const EdgeTimes& edge_of(const TimingModel& tm, const std::string& ts, const std
     return jt == it->second.pins.end() ? nr : jt->second;
 }
 
-// Physical waveform of one pin over the recorded vectors: driven edges for the analysis (every
-// pulse, capped) and (t, level) points for the scope. Pins pulsing too densely to draw one by
-// one (a clock in RL) are drawn at their state level.
+// Physical waveform of one pin over the recorded vectors, following the timing sheet:
+//   On      a pin that was not driving starts to drive here
+//   Data    the data edge (never before On)
+//   Return  back to the format's rest level (RL / RH / SBC)
+//   Off     a driving pin going to X / compare stops driving here, in that vector
+// Levels come from the levels sheet: 1 at Vih, 0 at Vil, H at Voh, L at Vol, an undriven pin at
+// Vterm when terminated, else halfway. Gives the driven edges for the analysis (every pulse,
+// capped) and (t, volts) points for the scope. Only the first MAX_DRAWN pulses are drawn one by
+// one; after that a pin is drawn at its state level.
 struct Wave {
     std::vector<double> rises, falls;
     std::vector<std::pair<double, double>> draw;
@@ -861,50 +946,70 @@ struct Wave {
     std::string format;                    // pulsed drive format seen on this pin
 };
 
-Wave wave_of(const Pattern& p, const RunResult& r, size_t k, const TimingModel& tm)
+Wave wave_of(const Pattern& p, const RunResult& r, size_t k, const TimingModel& tm, const PinVolts& v)
 {
     constexpr size_t MAX_EDGES = 200000, MAX_DRAWN = 2000;
     Wave w;
-    auto state = [&p, k](size_t v) { return k < p.states[v].size() ? p.states[v][k] : 'X'; };
+    auto state = [&p, k](size_t i) { return k < p.states[i].size() ? p.states[i][k] : 'X'; };
     size_t pulses = 0;
     for (auto& s : r.segs)
         if (pulsed(edge_of(tm, p.timeset_of(s.v), p.pins[k]).format, state(s.v))) pulses += size_t(s.cycles);
     w.dense = pulses > MAX_DRAWN;
-    char driven = 0;
+    const double idle = v.terminated ? v.vterm : (v.vil + v.vih) / 2;
+    auto volts = [&](char c) {
+        switch (c) {
+        case '0': return v.vil; case '1': return v.vih;
+        case 'L': return v.vol; case 'H': return v.voh;
+        default: return idle;
+        }
+    };
+    char driven = 0;                       // last driven level
+    bool driving = false;
+    size_t drawn_pulses = 0;
     double drawn = NaN;
-    auto draw = [&](double t, double v) {
-        if (v != drawn) { w.draw.emplace_back(t, v); drawn = v; }
+    auto draw = [&](double t, double value) {
+        if (value != drawn) { w.draw.emplace_back(t, value); drawn = value; }
     };
     auto drive = [&](double t, char c, bool show) {
         if (driven == '0' && c == '1') { if (w.rises.size() < MAX_EDGES) w.rises.push_back(t); }
         else if (driven == '1' && c == '0') { if (w.falls.size() < MAX_EDGES) w.falls.push_back(t); }
         driven = c;
-        if (show) draw(t, c == '1' ? 1.0 : 0.0);
+        if (show) draw(t, volts(c));
     };
     for (auto& s : r.segs) {
         const char c = state(s.v);
         const EdgeTimes& e = edge_of(tm, p.timeset_of(s.v), p.pins[k]);
         const double P = s.period;
         const double on = std::isfinite(e.on) ? e.on : 0.0, data = std::isfinite(e.data) ? e.data : 0.0;
+        const double off = std::isfinite(e.off) ? e.off : 0.0;
         const double ret = std::isfinite(e.ret) ? e.ret : P;
         if (c != '0' && c != '1') {                         // compare or not driven
-            draw(s.t, level_of(c));
+            draw(s.t + (driving ? off : 0.0), volts(c));
+            driving = false;
             continue;
         }
-        if (!pulsed(e.format, c)) {
-            drive(s.t + data, c, true);
+        const bool starting = !driving;
+        const double first_data = starting ? std::max(on, data) : data;
+        driving = true;
+        const bool is_pulsed = pulsed(e.format, c);
+        const char comp = c == '1' ? '0' : '1';
+        const char base = e.format == "RL" ? '0' : e.format == "RH" ? '1' : comp;
+        if (starting && on < data)                          // driving from On, the old or the rest level
+            draw(s.t + on, volts(is_pulsed ? base : driven ? driven : comp));
+        if (!is_pulsed) {
+            drive(s.t + first_data, c, true);
             continue;
         }
         if (w.format.empty()) w.format = e.format;
-        const char comp = c == '1' ? '0' : '1';
-        const char base = e.format == "RL" ? '0' : e.format == "RH" ? '1' : comp;
-        if (w.dense) draw(s.t, c == '1' ? 1.0 : 0.0);
         for (long i = 0; i < s.cycles; ++i) {
-            if (w.dense && w.rises.size() >= MAX_EDGES && w.falls.size() >= MAX_EDGES) break;
+            const bool show = drawn_pulses < MAX_DRAWN;
+            if (!show && w.rises.size() >= MAX_EDGES && w.falls.size() >= MAX_EDGES) break;
+            if (!show && (i == 0 || drawn_pulses == MAX_DRAWN)) draw(s.t + double(i) * P, volts(c));
+            if (drawn_pulses <= MAX_DRAWN) ++drawn_pulses;
             const double c0 = s.t + double(i) * P;
-            if (e.format == "SBC") drive(c0 + on, comp, !w.dense);
-            drive(c0 + data, c, !w.dense);
-            drive(c0 + ret, base, !w.dense);
+            if (e.format == "SBC") drive(c0 + on, comp, show);
+            drive(c0 + (i == 0 ? first_data : data), c, show);
+            drive(c0 + ret, base, show);
         }
     }
     return w;
@@ -922,7 +1027,7 @@ dm::Json num(double v) { return std::isfinite(v) ? dm::Json(v) : dm::Json(); }
 
 } // namespace
 
-dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
+dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay, const PinVoltMap& volts)
 {
     const RunResult r = p.run(tm, busy_delay);
     std::vector<std::pair<std::string, std::string>> roles;     // pin -> role, pin order
@@ -935,8 +1040,12 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
     if (p.meta.is_object())
         for (auto& [role, pin] : p.meta["roles"].members())
             if (pin.is_string() && !pin.as_string().empty()) given[pin.as_string()] = role;
+    auto volts_of = [&volts](const std::string& pin) {
+        auto it = volts.find(pin);
+        return it != volts.end() ? it->second : PinVolts{};
+    };
     for (size_t k = 0; k < p.pins.size(); ++k) {
-        edges[p.pins[k]] = wave_of(p, r, k, tm);
+        edges[p.pins[k]] = wave_of(p, r, k, tm, volts_of(p.pins[k]));
         if (!given.empty()) continue;
         bool compared = false;
         for (auto& s : r.segs) {
@@ -1035,7 +1144,8 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
                                   {"t", e.t}, {"rel", num(e.rel)}, {"width", num(e.width)}});
     out["events"] = events;
 
-    // timeline: stacked digital traces {t: [ms], channels: [{name, unit, data}]}, every pin
+    // timeline: stacked traces in one scale, so a larger swing is a taller trace
+    // {t: [ms], channels: [{name, unit, data}]}, every pin
     // sampled before and after each change of any pin
     double resolution = NaN;
     for (auto& name : p.used_timesets()) {
@@ -1047,7 +1157,14 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
     const size_t np = p.pins.size();
     std::vector<dm::Json> chans(np, dm::Json::array());
     dm::Json ts = dm::Json::array();
-    std::vector<double> cur(np, 0.5);
+    double lowest = 0, highest = 0;
+    for (auto& pin : p.pins) {
+        const PinVolts v = volts_of(pin);
+        lowest = std::min({lowest, v.vil, v.vol});
+        highest = std::max({highest, v.vih, v.voh});
+    }
+    const double scale = highest > lowest ? 0.8 / (highest - lowest) : 1.0;
+    std::vector<double> cur(np, lowest);
     struct Change { double t; size_t k; double v; };
     std::vector<Change> changes;
     for (size_t k = 0; k < np; ++k) {
@@ -1058,7 +1175,7 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
     std::stable_sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) { return a.t < b.t; });
     auto push = [&](double t) {
         ts.push_back(t * 1e3);
-        for (size_t k = 0; k < np; ++k) chans[k].push_back(cur[k] * 0.8 + 1.2 * double(np - 1 - k));
+        for (size_t k = 0; k < np; ++k) chans[k].push_back((cur[k] - lowest) * scale + 1.2 * double(np - 1 - k));
     };
     constexpr size_t MAX_POINTS = 60000;
     push(0.0);
@@ -1079,11 +1196,37 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay)
         std::string name = p.pins[k], tags;
         if (role == "CLK" && std::isfinite(clock)) tags = "CLK " + fmt_g(clock, 6) + " MHz";
         else if (!role.empty()) tags = role;
-        if (!w.format.empty()) tags += (tags.empty() ? "" : ", ") + w.format + (w.dense ? " 每周期一个脉冲，未逐个画出" : "");
+        if (!w.format.empty()) tags += (tags.empty() ? "" : ", ") + w.format + (w.dense ? " 只画前 2000 个脉冲" : "");
+        const PinVolts v = volts_of(p.pins[k]);
+        if (v.defined) tags += (tags.empty() ? "" : ", ") + fmt_g(v.vil, 4) + "\xE2\x80\xA6" + fmt_g(v.vih, 4) + " V";
+        else if (!volts.empty()) tags += (tags.empty() ? "" : ", ") + std::string("无电平");
+        if (!volts.empty()) tags += (tags.empty() ? "" : ", ") + (v.channel >= 0 ? "ch" + std::to_string(v.channel) : std::string("未接通道"));
         if (!tags.empty()) name += " (" + tags + ")";
         channels.push_back(dm::Json{{"name", name}, {"unit", ""}, {"data", chans[k]}});
     }
-    out["timeline"] = dm::Json{{"t", ts}, {"dt_ms", std::isfinite(resolution) ? resolution * 1e3 : 0.0}, {"channels", channels}};
+    // the same waveform pin by pin, in volts: for views with one strip per pin
+    dm::Json lanes = dm::Json::array();
+    for (size_t k = 0; k < np; ++k) {
+        const PinVolts v = volts_of(p.pins[k]);
+        std::vector<std::pair<double, double>> points = edges[p.pins[k]].draw;
+        std::stable_sort(points.begin(), points.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        dm::Json t = dm::Json::array(), value = dm::Json::array();
+        double lo = std::min(v.vil, v.vol), hi = std::max(v.vih, v.voh);
+        for (auto& [when, volts_at] : points) {
+            t.push_back(when);
+            value.push_back(volts_at);
+            lo = std::min(lo, volts_at);
+            hi = std::max(hi, volts_at);
+        }
+        std::string note = v.channel >= 0 ? "ch" + std::to_string(v.channel) : std::string("未接通道");
+        if (!v.defined) note += " · 无电平";
+        const std::string role = role_of(p.pins[k]);
+        if (!role.empty()) note += " · " + role;
+        if (!edges[p.pins[k]].format.empty()) note += " · " + edges[p.pins[k]].format;
+        lanes.push_back(dm::Json{{"name", p.pins[k]}, {"note", note}, {"lo", lo}, {"hi", hi}, {"t", t}, {"v", value}});
+    }
+    out["timeline"] = dm::Json{{"t", ts}, {"dt_ms", std::isfinite(resolution) ? resolution * 1e3 : 0.0}, {"channels", channels},
+                               {"lanes", lanes}, {"t_end", std::max(r.record_end, t_last)}};
     return out;
 }
 
@@ -1223,6 +1366,43 @@ TimingModel Project::model(const std::map<std::string, double>& sym) const
 }
 
 TimingModel Project::model() const { return model(spec_symbols(specs)); }
+
+PinVoltMap Project::pin_volts(const std::map<std::string, double>& sym) const
+{
+    PinVoltMap out;
+    auto eval = [&sym](const LevelRow& row, const char* key, double& value) {
+        auto it = row.fields.find(key);
+        if (it == row.fields.end() || it->second.empty()) return;
+        try {
+            value = evaluate(it->second, sym);
+        } catch (const std::exception&) {
+        }
+    };
+    // group entries first, so an entry for the pin itself wins
+    for (int pass = 0; pass < 2; ++pass) {
+        for (auto& row : levels) {
+            const std::vector<std::string> pins = expand(row.pin);
+            const bool group = pins.size() != 1 || pins[0] != row.pin;
+            if (group != (pass == 0)) continue;
+            for (auto& pin : pins) {
+                PinVolts& v = out[pin];
+                v.defined = true;
+                eval(row, "Vil", v.vil);
+                eval(row, "Vih", v.vih);
+                eval(row, "Vol", v.vol);
+                eval(row, "Voh", v.voh);
+                eval(row, "Vterm", v.vterm);
+                auto mode = row.fields.find("TerminationMode");
+                v.terminated = mode != row.fields.end() && mode->second == "Vterm";
+            }
+        }
+    }
+    for (auto& pin : pinmap.pins) {
+        auto c = pinmap.connections.find(pin);
+        out[pin].channel = c != pinmap.connections.end() ? c->second.channel : -1;
+    }
+    return out;
+}
 
 std::map<std::string, double> Project::periods() const
 {

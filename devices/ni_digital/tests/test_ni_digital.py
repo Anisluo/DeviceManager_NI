@@ -158,14 +158,42 @@ class PatternProjectEditor(unittest.TestCase):
         self.assertEqual(call(self.p, "pe.info")["current"], "TDC_M20_2")
         self.assertGreater(len(call(self.p, "pe.vectors")["rows"]), 1)
         call(self.p, "pe.edit_vector", v=0, field="pin:I0", value="1")
-        self.assertTrue(call(self.p, "pe.vectors")["modified"])
-        call(self.p, "pe.pattern_save")
+        self.assertFalse(call(self.p, "pe.vectors")["modified"])      # edits go straight to the file
+        path = os.path.join(self.tmp, "_work", "projects", "DemoPrj-TDC", "Patterns", "TDC_M20_2.digipat")
+        edited = open(path, "rb").read()
+        call(self.p, "pe.vector_undo")
+        self.assertNotEqual(open(path, "rb").read(), edited)
+        self.assertEqual(call(self.p, "pe.vectors")["rows"][0]["states"][0], "0")
+        call(self.p, "pe.edit_vector", v=0, field="pin:I0", value="1")
+        self.assertEqual(open(path, "rb").read(), edited)
         call(self.p, "pe.burst", single=False)                 # comes back to this driver
         self.assertIn(call(self.p, "pe.status")["state"], ("running", "done"))
         call(self.p, "pe.abort")
         rc, text = self.p._dm_invoke_json("pe.edit_vector", json.dumps({"v": 0, "field": "pin:I0", "value": "?"}))
         self.assertLess(rc, 0)
         self.assertIn("无效", json.loads(text)["error"])
+
+    def test_page_calls_exist(self):
+        """Every method named on the page is one the driver or its project core has."""
+        keys = ("method", "write", "write_many", "undo", "delete_method", "select", "add", "remove")
+        def names(node):
+            if isinstance(node, list):
+                for v in node:
+                    yield from names(v)
+            elif isinstance(node, dict):
+                for k, v in node.items():
+                    if k in keys and isinstance(v, str):
+                        yield v
+                    else:
+                        yield from names(v)
+        with open(os.path.join(HERE, "..", "page.json"), encoding="utf-8") as f:
+            page = json.load(f)
+        known = set(self.p._dm_methods())
+        rc, text = self.p._dm_invoke_json("pe.$methods", "{}")
+        self.assertGreaterEqual(rc, 0, text)
+        known |= {"pe." + m["name"] for m in json.loads(text)}
+        missing = sorted(set(names(page)) - known)
+        self.assertEqual(missing, [])
 
     def test_large_results_are_fetched(self):
         self.assertTrue(call(self.p, "pe.timeline")["channels"])

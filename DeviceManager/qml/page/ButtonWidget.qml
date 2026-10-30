@@ -4,7 +4,8 @@ import DeviceManager
 
 // { type: "button", label, style: "primary"|"secondary"|"ghost", action, reload_page,
 //   publish: "<source id>" — the result feeds readouts / tables bound to that source,
-//   refresh: ["<source id>"] — poll these sources right after the call }
+//   refresh: ["<source id>"] — poll these sources right after the call,
+//   fit: true — a small button at the left instead of the full width }
 RowLayout {
     id: w
     property var spec: ({})
@@ -23,10 +24,13 @@ RowLayout {
     }
 
     DmButton {
-        Layout.fillWidth: true
+        id: button
+        Layout.fillWidth: !w.spec.fit
+        Layout.preferredWidth: w.spec.fit ? Math.max(120, button.implicitWidth) : -1
         text: (w.busy ? "… " : "") + (w.spec.label || "执行")
         kind: w.spec.style || "primary"
         enabled: !w.busy && w.ctx && w.ctx.device && w.ctx.device.online
         onClicked: w.apply()
     }
+    Item { visible: !!w.spec.fit; Layout.fillWidth: true }
 }

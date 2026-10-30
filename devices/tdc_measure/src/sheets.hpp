@@ -21,12 +21,15 @@ void timing_set_format(std::string& x, const std::string& timeset, const std::st
 // New entry for `pin`: a copy of the entry of `copy_from`, or NR at 0 when `copy_from` is empty.
 void timing_add_pin(std::string& x, const std::string& timeset, const std::string& pin, const std::string& copy_from);
 void timing_remove_pin(std::string& x, const std::string& timeset, const std::string& pin);
+void timing_rename_pin(std::string& x, const std::string& timeset, const std::string& pin, const std::string& to);
+void timing_rename_timeset(std::string& x, const std::string& name, const std::string& to);
 void timing_add_timeset(std::string& x, const std::string& name, const std::string& copy_of);
 void timing_remove_timeset(std::string& x, const std::string& name);
 
 // ---- .digilevels ----
 void levels_set(std::string& x, const std::string& pin, const std::string& field, const std::string& text);
 void levels_add(std::string& x, const std::string& pin, const std::string& copy_of);
+void levels_rename(std::string& x, const std::string& pin, const std::string& to);
 void levels_remove(std::string& x, const std::string& pin);
 
 // ---- .specs ----
@@ -35,6 +38,10 @@ void specs_set(std::string& x, const std::string& section, const std::string& sy
                const std::string& text);
 void specs_add(std::string& x, const std::string& section, const std::string& symbol, const std::string& definition);
 void specs_remove(std::string& x, const std::string& section, const std::string& symbol);
+void specs_rename(std::string& x, const std::string& section, const std::string& symbol, const std::string& to);
+// Whole-name uses of a specification ("DC.VDD") in any sheet, as formulas write them.
+bool has_symbol(const std::string& x, const std::string& key);
+void replace_symbol(std::string& x, const std::string& key, const std::string& to);
 
 // ---- .pinmap ----
 void pinmap_add_pin(std::string& x, const std::string& pin);
@@ -42,5 +49,8 @@ void pinmap_remove_pin(std::string& x, const std::string& pin);          // with
 void pinmap_set_connection(std::string& x, const std::string& pin, const std::string& instrument, int channel);
 void pinmap_set_groups(std::string& x, const std::string& pin, const std::vector<std::string>& groups);
 void pinmap_rename_instrument(std::string& x, const std::string& from, const std::string& to);
+void pinmap_rename_pin(std::string& x, const std::string& pin, const std::string& to);
+// Every pin="..." attribute of a sheet: the entries of a renamed pin.
+void replace_pin_attr(std::string& x, const std::string& pin, const std::string& to);
 
 } // namespace tdc

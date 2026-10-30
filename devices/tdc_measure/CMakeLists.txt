@@ -2,6 +2,7 @@ dm_add_plugin(tdc_measure SOURCES
     src/tdc_task.cpp
     src/project.cpp
     src/sheets.cpp
+    src/syntax.cpp
     src/tdcgen.cpp
     src/tdms.cpp
     src/util.cpp

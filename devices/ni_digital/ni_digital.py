@@ -525,7 +525,7 @@ class NiDigital(Plugin):
             self.pattern_core = PatternCore(used["library"], {
                 "plugin_dir": used["dir"], "resource": self.resource, "simulate": self.simulate,
                 "instruments": {"digital": "self"},
-                "options": {"project": demo,
+                "options": {"project": demo, "autosave": True,
                             "projects_dir": projects, "work_dir": os.path.join(work, "editor"),
                             "instrument_name": self.resource, "pattern": "TDC_M20_2"},
             }, self._dm_invoke_json, self._core_event, os.path.join(work, "editor"))

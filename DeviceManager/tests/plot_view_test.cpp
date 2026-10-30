@@ -1,6 +1,7 @@
 // PlotView: paint time with 1,000,000-point series and the mouse zoom gestures, driven by real
 // QMouseEvent / QWheelEvent through a QQuickWindow (offscreen, software backend).
 //   plot_view_test <output dir for PNGs>
+#include "../src/app/LogicView.h"
 #include "../src/app/PlotView.h"
 
 #include <QDir>
@@ -294,6 +295,100 @@ int main(int argc, char** argv)
         r.doubleClick(r.pr().center());
         r.render();
         CHECK(near(plot.viewXMax(), 1030));
+    }
+
+    // ---- LogicView: one strip per pin, time zoom only, two cursors
+    {
+        plot.setVisible(false);
+        auto* logic = new LogicView(r.win.contentItem());
+        logic->setSize(QSizeF(1200, 50 + 72 * 3));
+        logic->setProperty("seriesColors", QVariantList{QColor("#D97757"), QColor("#4E79A7"), QColor("#59A14F")});
+        const auto lane = [](const char* name, double hi, QVariantList t, QVariantList v) {
+            return QVariantMap{{"name", name}, {"note", "ch0 · RL"}, {"lo", 0.0}, {"hi", hi}, {"t", t}, {"v", v}};
+        };
+        // A: rises at 10 us, falls at 20 us; B: rises at 30 us, falls at 70 us; C: undriven halfway
+        logic->setData(QVariantList{lane("A", 3.3, {0.0, 10e-6, 20e-6}, {0.0, 3.3, 0.0}),
+                                    lane("B", 5.0, {0.0, 30e-6, 70e-6}, {0.0, 5.0, 0.0}),
+                                    lane("C", 1.8, {0.0}, {0.9})}, 100e-6);
+        r.render();
+        CHECK(logic->laneCount() == 3);
+        CHECK(near(logic->viewMin() + 1, 1) && near(logic->viewMax(), 100e-6));
+        const QRectF lr = logic->plotRect();
+        CHECK(near(lr.height(), 72 * 3));
+        auto px = [&](double t) { return lr.left() + (t - logic->viewMin()) / (logic->viewMax() - logic->viewMin()) * lr.width(); };
+
+        // wheel: time only, around the pointer
+        const double mid = (logic->viewMin() + logic->viewMax()) / 2;
+        r.wheel(QPointF(px(mid), lr.center().y()), 120);
+        CHECK(logic->viewMax() - logic->viewMin() < 100e-6 * 0.9);
+        CHECK(near(logic->viewMin() + logic->viewMax(), 2 * mid, 1e-6));
+        logic->fit();
+
+        // left drag: a time range
+        r.drag(QPointF(px(25e-6), lr.center().y()), QPointF(px(75e-6), lr.center().y()));
+        CHECK(near(logic->viewMin(), 25e-6, 1e-3) && near(logic->viewMax(), 75e-6, 1e-3));
+        // right drag pans
+        const double span = logic->viewMax() - logic->viewMin(), before = logic->viewMin();
+        r.drag(QPointF(px(50e-6), lr.center().y()), QPointF(px(50e-6) + 100, lr.center().y()), Qt::RightButton);
+        CHECK(near(logic->viewMax() - logic->viewMin(), span, 1e-6) && logic->viewMin() < before);
+        logic->fit();
+
+        // cursors: dragged ones snap to an edge, Δt is exact
+        r.render();
+        r.drag(QPointF(px(logic->cursor1()), lr.center().y()), QPointF(px(10e-6) + 3, lr.center().y()));
+        CHECK(near(logic->cursor1(), 10e-6, 1e-9));
+        r.drag(QPointF(px(logic->cursor2()), lr.center().y()), QPointF(px(70e-6) - 3, lr.center().y()));
+        CHECK(near(logic->cursor2(), 70e-6, 1e-9));
+        CHECK(near(logic->cursor2() - logic->cursor1(), 60e-6, 1e-9));
+        r.render();
+        r.win.grabWindow().save(r.out + "/logic_view.png");
+        // away from an edge the cursor stays where it is put
+        r.drag(QPointF(px(logic->cursor2()), lr.center().y()), QPointF(px(45e-6), lr.center().y()));
+        CHECK(near(logic->cursor2(), 45e-6, 1e-3));
+        // ruler: left places C1, right places C2
+        const double ruler = lr.top() - 8;
+        r.mouse(QEvent::MouseButtonPress, QPointF(px(30e-6), ruler), Qt::LeftButton, Qt::LeftButton);
+        r.mouse(QEvent::MouseButtonRelease, QPointF(px(30e-6), ruler), Qt::LeftButton, Qt::NoButton);
+        CHECK(near(logic->cursor1(), 30e-6, 1e-9));
+        r.mouse(QEvent::MouseButtonPress, QPointF(px(20e-6), ruler), Qt::RightButton, Qt::RightButton);
+        r.mouse(QEvent::MouseButtonRelease, QPointF(px(20e-6), ruler), Qt::RightButton, Qt::NoButton);
+        CHECK(near(logic->cursor2(), 20e-6, 1e-9));
+
+        // a flag grabs its own cursor: dragging C2 by its flag leaves C1 alone
+        r.mouse(QEvent::MouseButtonPress, QPointF(px(70e-6), ruler), Qt::RightButton, Qt::RightButton);
+        r.mouse(QEvent::MouseButtonRelease, QPointF(px(70e-6), ruler), Qt::RightButton, Qt::NoButton);
+        r.render();
+        CHECK(near(logic->cursor2(), 70e-6, 1e-9));
+        r.drag(logic->flagRect(1).center(), QPointF(px(20e-6), ruler));
+        CHECK(near(logic->cursor1(), 30e-6, 1e-9) && near(logic->cursor2(), 20e-6, 1e-9));
+        // never onto the other cursor's edge, so Δt cannot collapse by snapping
+        r.drag(logic->flagRect(1).center(), QPointF(px(30e-6) + 2, ruler));
+        CHECK(logic->cursor2() != logic->cursor1());
+        r.render();
+        CHECK(!logic->flagRect(0).intersects(logic->flagRect(1)));      // both flags stay visible
+        // on top of each other: the drag direction picks the cursor
+        r.drag(QPointF(px(logic->cursor2()), lr.center().y()), QPointF(px(logic->cursor1()), lr.center().y()));
+        const double c1 = logic->cursor1(), c2 = logic->cursor2();
+        CHECK(std::abs(px(c1) - px(c2)) < 1);
+        r.drag(QPointF(px(c1), lr.center().y()), QPointF(px(c1) + 150, lr.center().y()));
+        CHECK(near(logic->cursor1(), c1) || near(logic->cursor2(), c2));
+        CHECK(logic->cursor1() != c1 || logic->cursor2() != c2);
+        r.render();
+        // out of view: the flag stays at the edge
+        r.drag(QPointF(px(80e-6), lr.center().y()), QPointF(px(95e-6), lr.center().y()));
+        r.render();
+        CHECK(logic->flagRect(0).right() <= lr.right() + 1 && logic->flagRect(0).left() >= lr.left() - 1);
+        logic->fit();
+        r.mouse(QEvent::MouseButtonPress, QPointF(px(30e-6), ruler), Qt::LeftButton, Qt::LeftButton);
+        r.mouse(QEvent::MouseButtonRelease, QPointF(px(30e-6), ruler), Qt::LeftButton, Qt::NoButton);
+
+        // a new simulation of the same pins keeps zoom and cursors
+        r.drag(QPointF(px(25e-6), lr.center().y()), QPointF(px(55e-6), lr.center().y()));
+        const double zoomed = logic->viewMin();
+        logic->setData(QVariantList{lane("A", 3.3, {0.0}, {0.0}), lane("B", 5.0, {0.0}, {0.0}), lane("C", 1.8, {0.0}, {0.0})}, 100e-6);
+        CHECK(near(logic->viewMin(), zoomed) && near(logic->cursor1(), 30e-6, 1e-9));
+        logic->setData(QVariantList{lane("A", 3.3, {0.0}, {0.0})}, 50e-6);       // another pattern
+        CHECK(near(logic->viewMax(), 50e-6) && logic->laneCount() == 1);
     }
 
     std::printf("%s (%d failures)\n", g_failures ? "FAILED" : "ALL OK", g_failures);

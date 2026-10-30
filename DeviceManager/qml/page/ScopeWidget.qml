@@ -4,19 +4,26 @@ import DeviceManager
 import "../js/Format.js" as Fmt
 
 // { type: "scope", source, height, channels: ["iq", ...] (optional filter), unit_index: 0 }
-// Plots a capture { t: [ms...], channels: [{ name, unit, data }] }. unit_index picks the channels
+// Plots a capture { t: [ms...], channels: [{ name, unit, data }], rev (optional: same rev, same data) }.
+// hint: text before the first capture. stale_source, stale_field: when that value no longer equals
+// the capture's rev, the plot says it is out of date. unit_index picks the channels
 // of the n-th distinct unit, so one capture can be split across plots with sensible Y axes.
 ColumnLayout {
     id: w
     property var spec: ({})
     property var ctx: null
-    property string note: "等待采集…"
+    property string note: spec.hint || "等待采集…"
     property bool empty: false
+    property var rev: undefined
+    property var liveRev: undefined
+    readonly property bool stale: rev !== undefined && liveRev !== undefined && rev !== liveRev
     // a secondary plot (unit_index > 0) with nothing to show folds away instead of an empty frame
     visible: !(empty && (spec.unit_index || 0) > 0)
     spacing: 4
 
     function show(cap) {
+        if (cap && cap.rev !== undefined && cap.rev === rev) return
+        rev = cap ? cap.rev : undefined
         if (!cap || !cap.channels || !cap.t || cap.t.length === 0) { plot.series = []; plot.xs = []; empty = true; return }
         let chs = cap.channels
         if (spec.channels) chs = chs.filter(c => spec.channels.indexOf(c.name) >= 0)
@@ -34,12 +41,15 @@ ColumnLayout {
 
     Connections {
         target: w.ctx
-        function onSourceUpdated(id, data) { if (id === w.spec.source) w.show(data) }
+        function onSourceUpdated(id, data) {
+            if (id === w.spec.source) w.show(data)
+            if (id === w.spec.stale_source) w.liveRev = Fmt.field(data, w.spec.stale_field)
+        }
     }
 
     Text {
-        text: w.note
-        color: Theme.textFaint
+        text: w.stale ? "配置已改动，这是上一次的波形，请重新仿真" : w.note
+        color: w.stale ? Theme.toneColor("warning") : Theme.textFaint
         font.family: Theme.sans
         font.pixelSize: Theme.fontXs
     }

@@ -24,6 +24,8 @@ qt_add_executable(DeviceManager WIN32 MACOSX_BUNDLE
     src/app/AppController.cpp   src/app/AppController.h
     src/app/SyntaxHighlighter.cpp src/app/SyntaxHighlighter.h
     src/app/PlotView.cpp        src/app/PlotView.h
+    src/app/PlotMath.h
+    src/app/LogicView.cpp       src/app/LogicView.h
     src/app/WindowChrome.cpp    src/app/WindowChrome.h
     src/core/PluginModule.h
     src/python/PythonRuntime.cpp      src/python/PythonRuntime.h
@@ -53,6 +55,8 @@ set(DM_QML_FILES
     qml/page/SweepWidget.qml
     qml/page/TextWidget.qml
     qml/page/ScopeWidget.qml
+    qml/page/LogicWidget.qml
+    qml/page/TreeWidget.qml
     qml/page/ParamsWidget.qml
     qml/controls/CodeEditor.qml
     qml/controls/XyPlot.qml
@@ -128,7 +132,8 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/sdk/python/ DESTINATION sdk/python PATTERN
 
 # PlotView: 1M-point paint time and the zoom gestures through real mouse / wheel events
 if(DM_BUILD_TESTS)
-    qt_add_executable(plot_view_test tests/plot_view_test.cpp src/app/PlotView.cpp src/app/PlotView.h)
+    qt_add_executable(plot_view_test tests/plot_view_test.cpp src/app/PlotView.cpp src/app/PlotView.h
+        src/app/LogicView.cpp src/app/LogicView.h)
     target_link_libraries(plot_view_test PRIVATE Qt6::Core Qt6::Gui Qt6::Quick)
     set_target_properties(plot_view_test PROPERTIES WIN32_EXECUTABLE OFF)
     add_test(NAME plot_view COMMAND plot_view_test ${CMAKE_BINARY_DIR}/plot_view)

@@ -1,6 +1,6 @@
 {
- "title": "TDC 测试（6571）",
- "subtitle": "DemoPrj-TDC · START / HIT 激励 · BUSY 握手",
+ "title": "TDC测量",
+ "subtitle": "PXIe-6571 · 时钟 / 触发 / 两路方波 · DemoPrj-TDC",
  "columns": 12,
  "sources": [
   {
@@ -55,6 +55,424 @@
   }
  ],
  "tabs": [
+  {
+   "title": "信号生成",
+   "sections": [
+    {
+     "title": "引脚",
+     "subtitle": "CLK 连续时钟，TRIG 边沿触发",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "g_clk",
+       "label": "CLK 时钟",
+       "value": "I3",
+       "options_from": {
+        "method": "pin_options",
+        "args": {
+         "optional": true
+        },
+        "field": "pins"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "g_trig",
+       "label": "TRIG 检测",
+       "value": "I0",
+       "options_from": {
+        "method": "pin_options",
+        "field": "pins"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "g_out1",
+       "label": "OUT1 方波",
+       "value": "I1",
+       "options_from": {
+        "method": "pin_options",
+        "field": "pins"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "g_out2",
+       "label": "OUT2 方波",
+       "value": "I2",
+       "options_from": {
+        "method": "pin_options",
+        "field": "pins"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "g_edge",
+       "label": "触发边沿",
+       "value": "rising",
+       "options": [
+        {
+         "label": "上升沿（低→高）",
+         "value": "rising"
+        },
+        {
+         "label": "下降沿（高→低）",
+         "value": "falling"
+        }
+       ]
+      },
+      {
+       "type": "number",
+       "id": "g_clock",
+       "label": "时钟频率",
+       "unit": "MHz",
+       "value": 50,
+       "min": 0.025,
+       "max": 200,
+       "step": 1,
+       "decimals": 3
+      }
+     ]
+    },
+    {
+     "title": "输出",
+     "subtitle": "延时从 TRIG 边沿算起；所有边沿按时钟周期取整",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "g_f1",
+       "label": "OUT1 频率",
+       "unit": "kHz",
+       "value": 250,
+       "min": 0.001,
+       "max": 100000,
+       "step": 10,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "g_n1",
+       "label": "OUT1 次数",
+       "unit": "",
+       "value": 1,
+       "min": 1,
+       "max": 100000,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "number",
+       "id": "g_d1",
+       "label": "OUT1 延时",
+       "unit": "µs",
+       "value": 0,
+       "min": 0,
+       "max": 1000000.0,
+       "step": 1,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "g_f2",
+       "label": "OUT2 频率",
+       "unit": "kHz",
+       "value": 500,
+       "min": 0.001,
+       "max": 100000,
+       "step": 10,
+       "decimals": 3
+      },
+      {
+       "type": "number",
+       "id": "g_n2",
+       "label": "OUT2 次数",
+       "unit": "",
+       "value": 16,
+       "min": 1,
+       "max": 100000,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "number",
+       "id": "g_d2",
+       "label": "OUT2 延时",
+       "unit": "µs",
+       "value": 200,
+       "min": 0,
+       "max": 1000000.0,
+       "step": 1,
+       "decimals": 3
+      }
+     ]
+    },
+    {
+     "title": "生成与运行",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "g_post",
+       "label": "结束后等待",
+       "unit": "µs",
+       "value": 1000,
+       "min": 0,
+       "max": 10000000.0,
+       "step": 100,
+       "decimals": 1
+      },
+      {
+       "type": "number",
+       "id": "g_loops",
+       "label": "重复次数",
+       "unit": "",
+       "value": 1,
+       "min": 1,
+       "max": 65535,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "text",
+       "id": "g_name",
+       "label": "图形名",
+       "value": "TDC_GEN",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "生成并预览",
+       "style": "primary",
+       "action": {
+        "method": "generate",
+        "args": {
+         "name": "$form.g_name",
+         "clk_pin": "$form.g_clk",
+         "trig_pin": "$form.g_trig",
+         "out1_pin": "$form.g_out1",
+         "out2_pin": "$form.g_out2",
+         "clock_mhz": "$form.g_clock",
+         "edge": "$form.g_edge",
+         "out1_khz": "$form.g_f1",
+         "out1_cycles": "$form.g_n1",
+         "out1_delay_us": "$form.g_d1",
+         "out2_khz": "$form.g_f2",
+         "out2_cycles": "$form.g_n2",
+         "out2_delay_us": "$form.g_d2",
+         "post_us": "$form.g_post",
+         "loops": "$form.g_loops"
+        }
+       },
+       "publish": "gen",
+       "id": "generate"
+      },
+      {
+       "type": "button",
+       "label": "运行",
+       "style": "secondary",
+       "action": {
+        "method": "burst",
+        "args": {}
+       },
+       "publish": "st",
+       "id": "gen_burst"
+      },
+      {
+       "type": "button",
+       "label": "中止",
+       "style": "ghost",
+       "action": {
+        "method": "abort",
+        "args": {}
+       },
+       "publish": "st"
+      },
+      {
+       "type": "button",
+       "label": "保存到工程",
+       "style": "ghost",
+       "action": {
+        "method": "save_generated",
+        "args": {}
+       },
+       "id": "gen_save"
+      },
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "st",
+       "field": "state_text",
+       "digits": 5,
+       "states": {
+        "运行中": {
+         "text": "运行中",
+         "tone": "accent"
+        },
+        "完成": {
+         "text": "完成",
+         "tone": "ok"
+        },
+        "空闲": {
+         "text": "空闲",
+         "tone": "muted"
+        },
+        "已中止": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "错误": {
+         "text": "错误",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "st",
+       "field": "result",
+       "digits": 5,
+       "states": {
+        "PASS": {
+         "text": "PASS",
+         "tone": "ok"
+        },
+        "FAIL": {
+         "text": "FAIL",
+         "tone": "error"
+        },
+        "ABORT": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "ERROR": {
+         "text": "错误",
+         "tone": "error"
+        },
+        "—": {
+         "text": "—",
+         "tone": "muted"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "实际输出",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "当前图形",
+       "source": "sum",
+       "field": "pattern",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "时钟",
+       "source": "sum",
+       "field": "gen.clock_mhz",
+       "digits": 4,
+       "unit": "MHz"
+      },
+      {
+       "type": "readout",
+       "label": "OUT1",
+       "source": "sum",
+       "field": "gen.out1_khz",
+       "digits": 6,
+       "unit": "kHz"
+      },
+      {
+       "type": "readout",
+       "label": "OUT2",
+       "source": "sum",
+       "field": "gen.out2_khz",
+       "digits": 6,
+       "unit": "kHz"
+      },
+      {
+       "type": "readout",
+       "label": "OUT1 → OUT2",
+       "source": "sum",
+       "field": "gen.out1_to_out2",
+       "digits": 5,
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "单次测量",
+       "source": "sum",
+       "field": "iteration_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "向量数",
+       "source": "sum",
+       "field": "gen.vectors",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "取整",
+       "source": "sum",
+       "field": "gen.note",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "波形预览（第一次测量，TRIG 等待按仿真芯片计）",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "tl",
+       "unit_index": 0,
+       "height": 260
+      }
+     ]
+    },
+    {
+     "title": "事件",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "sum",
+       "rows_field": "events_rows",
+       "columns": [
+        {
+         "field": "event",
+         "label": "事件"
+        },
+        {
+         "field": "pin",
+         "label": "引脚"
+        },
+        {
+         "field": "t",
+         "label": "时间"
+        },
+        {
+         "field": "rel",
+         "label": "相对 OUT1"
+        },
+        {
+         "field": "width",
+         "label": "宽度 / 时长"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
   {
    "title": "运行",
    "sections": [

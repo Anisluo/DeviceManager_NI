@@ -1,4 +1,4 @@
-"""TDC test program on the PXIe-6571 (Digital Pattern Editor project DemoPrj-TDC).
+"""TDC测量: TDC stimulus on the PXIe-6571 (Digital Pattern Editor project DemoPrj-TDC).
 
 The 6571 is the TDC's stimulus: it waits for the chip's BUSY/ready pin to rise (a jump_if wait
 loop on an H compare), drives a START pulse, then a train of HIT pulses, waits, and repeats the
@@ -7,19 +7,24 @@ whole measurement N times. This plugin
     vectors, so every pattern shows its START / HIT timing, loop count and run time;
   - edits repeat / set_loop counts in place to make variants (delays, hit count, pulse widths,
     loop count) without the pattern compiler, and saves them as new .digipat files;
+  - generates new four-pin stimulus patterns (CLK / TRIG edge / OUT1 / delayed OUT2 square waves)
+    straight to .digipat, with their own timing sheet (tdcgen);
   - bursts a pattern on the instrument without blocking (progress, abort, pass/fail), or in
     simulation runs the same program against a virtual TDC whose BUSY pin follows the stimulus.
 """
 
 import copy
+import json
 import os
 import random
+import shutil
 import time
 
 from dm.plugin import Plugin, PluginError, method, E_STATE
 
 # Helper modules are imported at load time, while the plugin folder is on sys.path.
 import digiproj as dp
+import tdcgen
 from tdc_hw import Hardware
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,9 +38,11 @@ class Tdc6571(Plugin):
         folder = o.get("project") or os.path.join(HERE, "project", "DemoPrj-TDC")
         if not os.path.isabs(folder):
             folder = os.path.join(HERE, folder)
-        self.project = dp.Project(folder)
         self.work = o.get("work_dir") or os.path.join(HERE, "_work")
-        os.makedirs(self.work, exist_ok=True)
+        self.gen_dir = os.path.join(self.work, "gen")
+        os.makedirs(self.gen_dir, exist_ok=True)
+        self.project = dp.Project(folder, [self.gen_dir])
+        self.gen_last = None
         self.busy_delay = float(o.get("busy_delay_us", 120.0)) * 1e-6     # simulated TDC conversion time
         self.spec_values = {}                                               # "DC.VDD" -> "3.0 V"
         self._cache = {}
@@ -48,6 +55,7 @@ class Tdc6571(Plugin):
         if not self.simulate:
             self.hw = Hardware(self.resource or self._instrument(), self.project,
                                driver_simulate=bool(o.get("driver_simulate", False)))
+        self._gen_template = os.path.join(folder, "Patterns", "TDC_M20_2.digipat")
         self.log(f"TDC 工程 {os.path.basename(folder)}：{len(names)} 个图形，"
                  f"{'NI-Digital ' + (self.resource or self._instrument()) if self.hw else '仿真 TDC'}")
 
@@ -150,6 +158,7 @@ class Tdc6571(Plugin):
                     "iteration_text": f(a["iteration"]), "loops_text": f"× {a['loops']}",
                     "roles_text": "  ".join(f"{p}={r}" for p, r in a["roles"].items()) or "—",
                     "notes_text": "；".join(a["notes"]) or "无",
+                    "gen": self._gen_info() if a.get("generated") else None,
                     "current": self.current, "modified": a["modified"]})
         out["rows"] = [
             {"item": "START 引脚", "value": a["start_pin"]}, {"item": "HIT 引脚", "value": a["hit_pin"]},
@@ -263,8 +272,11 @@ class Tdc6571(Plugin):
               "loops": 1 if single else a["loops"], "pass": None, "fails": {}}
         if self.hw:
             path = self._run_file(p, single)
+            sheets = {self.project.timing_file.get(ts) for ts in p.timesets}
+            if None in sheets or len(sheets) != 1:
+                raise PluginError(f"{p.file} 的时序集 {p.timesets} 不在同一个已知的时序表里")
             try:
-                self.hw.start(path, p.name)
+                self.hw.start(path, p.name, sheets.pop())
             except Exception as e:  # noqa: BLE001
                 self.run_state = {"state": "error", "pattern": p.file, "error": str(e)}
                 raise PluginError(f"burst 失败：{e}")
@@ -362,7 +374,7 @@ class Tdc6571(Plugin):
                 path = os.path.join(self.work, "specs", os.path.basename(self.project.specs_path))
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 dp.write_specs(self.project.specs_path, path, self.spec_values)
-            self.hw.apply(path or self.project.specs_path)
+            self.hw.set_specs(path or self.project.specs_path)
         self.log(f"规格 {name} = {text}")
         return {"name": name, "value": float(value), "clamped": False}
 
@@ -407,6 +419,80 @@ class Tdc6571(Plugin):
         return {"rows": [{"pin": p, "instrument": pm["connections"].get(p, {}).get("instrument", "—"),
                           "channel": pm["connections"].get(p, {}).get("channel", "—"),
                           "groups": ", ".join(groups[p]), "patterns": used.get(p, 0)} for p in pm["pins"]]}
+
+    def _gen_info(self):
+        p = self._pattern()
+        g = dict(p.meta.get("summary") or {})
+        warnings = g.get("warnings") or []
+        g.update({"vectors": len(p.base_ins), "note": "；".join(warnings) or "无（频率、延时都是时钟周期的整数倍）"})
+        return g
+
+    # ------------------------------------------------------------------ generator
+    @method("Pins of the pin map for the generator's selectors")
+    def pin_options(self, optional: bool = False):
+        pins = [{"label": p, "value": p} for p in self.project.pinmap["pins"]]
+        return {"pins": ([{"label": "（不用）", "value": ""}] if optional else []) + pins}
+
+    @method("Generator parameters: the last generated set, else the defaults")
+    def gen_params(self):
+        return dict(tdcgen.DEFAULTS, **((self.gen_last or {}).get("params") or {}))
+
+    @method("Generate a CLK / TRIG / OUT1 / OUT2 stimulus pattern, select it and return its timing")
+    def generate(self, name: str = "TDC_GEN", clk_pin: str = "I3", trig_pin: str = "I0", out1_pin: str = "I1",
+                 out2_pin: str = "I2", clock_mhz: float = 50.0, edge: str = "rising",
+                 out1_khz: float = 250.0, out1_cycles: int = 1, out1_delay_us: float = 0.0,
+                 out2_khz: float = 500.0, out2_cycles: int = 16, out2_delay_us: float = 200.0,
+                 post_us: float = 1000.0, loops: int = 1):
+        if self.run_state.get("state") == "running":
+            raise PluginError("图形正在运行，先中止", E_STATE)
+        params = {k: v for k, v in locals().items() if k != "self"}
+        try:
+            pl = tdcgen.plan(params, self.project.pinmap["pins"])
+        except tdcgen.GenError as e:
+            raise PluginError(str(e))
+        clash = self.project.patterns.get(pl["name"])
+        if clash is not None and not clash.path.startswith(os.path.abspath(self.gen_dir)):
+            raise PluginError(f"工程里已有图形 {pl['name']}，请换个名字")
+        template = self._gen_template if os.path.exists(self._gen_template) else \
+            next(p.path for p in self.project.patterns.values() if not p.generated)
+        with open(template, "rb") as fh:
+            data = tdcgen.build(pl, fh.read())
+        path = os.path.join(self.gen_dir, pl["name"] + ".digipat")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        tdcgen.timing_sheet(pl, self.project.pinmap["pins"], self.gen_dir)
+        summary = tdcgen.summary(pl)
+        self.gen_last = {"params": pl["params"], "roles": pl["roles"], "summary": summary}
+        with open(tdcgen.sidecar_path(path), "w", encoding="utf-8") as fh:
+            json.dump(self.gen_last, fh, ensure_ascii=False, indent=1)
+        self.project.rescan()
+        self.current = pl["name"]
+        a = self._analysis()
+        f = dp.fmt_time
+        self.log(f"已生成 {pl['name']}：{len(self._pattern().base_ins)} 个向量，单次测量 {f(a['iteration'])}")
+        return dict(summary, name=pl["name"], vectors=len(self._pattern().base_ins),
+                    out1_start_text=f(summary["out1_start"]), out2_start_text=f(summary["out2_start"]),
+                    delay_text=f(summary["out1_to_out2"]), measure_text=f(a["iteration"]),
+                    total_text=f(a["total"]), note=tdcgen.quantised_note(pl),
+                    timeset=pl["timeset"], period_text=f(pl["period"]))
+
+    @method("Copy the current generated pattern (and its timing sheet) into the project folder")
+    def save_generated(self):
+        p = self._pattern()
+        if not p.generated or not p.path.startswith(os.path.abspath(self.gen_dir)):
+            raise PluginError("当前图形不是刚生成的图形")
+        dest = os.path.join(self.project.folder, "Patterns")
+        tdest = os.path.join(self.project.folder, "Timing")
+        os.makedirs(tdest, exist_ok=True)
+        if os.path.exists(os.path.join(dest, p.file + ".digipat")):
+            raise PluginError(f"工程里已有 {p.file}.digipat")
+        sheet = self.project.timing_file[p.timesets[0]]
+        shutil.copy2(sheet, tdest)
+        for src in (p.path, tdcgen.sidecar_path(p.path)):
+            shutil.move(src, dest)
+        self.project.rescan()
+        self.log(f"已保存 {p.file}.digipat 和时序表 {os.path.basename(sheet)} 到工程")
+        return {"saved": os.path.join(dest, p.file + ".digipat"), "timing": os.path.join(tdest, os.path.basename(sheet))}
 
     @method("[sim] TDC conversion time before BUSY rises again")
     def sim_set_busy(self, us: float):

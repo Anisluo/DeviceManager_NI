@@ -14,6 +14,7 @@ Compiled vector encoding (observed in Digital Pattern Editor 21.8 files, Archite
 """
 
 import bisect
+import json
 import math
 import os
 import random
@@ -171,7 +172,8 @@ class Pattern:
     def __init__(self, path):
         self.path = path
         self.file = os.path.splitext(os.path.basename(path))[0]
-        self.data = open(path, "rb").read()
+        with open(path, "rb") as fh:
+            self.data = fh.read()
         self.tdms = tdms_lite.read(self.data)
         ch = lambda g, n: tdms_lite.channel(self.tdms, g, n)
         self.name = self.tdms["props"].get("name") or self.file          # burst start label
@@ -192,6 +194,15 @@ class Pattern:
                                        for k in range(len(self.pins))))
         self.edits = {}                 # vector index -> new operand
         self.mtime = os.path.getmtime(path)
+        self.meta = {}                  # generator sidecar: {"params", "roles", "summary"}
+        side = os.path.splitext(path)[0] + ".tdcgen.json"
+        if os.path.exists(side):
+            try:
+                with open(side, encoding="utf-8") as fh:
+                    self.meta = json.load(fh)
+            except (OSError, ValueError):
+                self.meta = {}
+        self.generated = bool(self.meta)
 
     # ---- instructions ----
     @property
@@ -395,6 +406,10 @@ class Pattern:
                     t += cycles * period
                     ready_at = None
                     pc += 1
+                elif target == pc and "L" in states:
+                    # waiting for BUSY low: the virtual TDC holds it low while converting
+                    t += period
+                    pc += 1
                 else:
                     if target != pc:
                         notes.add(f"v{pc}: jump_if 到其他标签，仿真按条件不成立处理")
@@ -432,22 +447,31 @@ def pulses(timeline, k):
     return rises, falls
 
 
+GEN_ROLE = {"TRIG": "BUSY", "OUT1": "START", "OUT2": "HIT", "CLK": "CLK"}
+
+
 def analyze(pattern, periods, busy_delay=120e-6):
-    """TDC timing of a pattern: roles of the pins, START / HIT timing, loop and total time."""
+    """TDC timing of a pattern: roles of the pins, START / HIT timing, loop and total time.
+    Generated patterns carry their roles (CLK / TRIG / OUT1 / OUT2); others are inferred."""
     r = pattern.run(periods, busy_delay)
     tl = r["timeline"]
     roles, edges = {}, {}
+    given = {pin: role for role, pin in (pattern.meta.get("roles") or {}).items() if pin}
     for k, pin in enumerate(pattern.pins):
         used = {s[k] for _, s in tl if k < len(s)}
         rises, falls = pulses(tl, k)
         edges[pin] = (rises, falls)
+        if given:
+            continue
         if used & {"H", "L"}:
             roles[pin] = "BUSY"
     # START rises first (ties: fewer pulses); HIT is the busiest of the others. A lone pin that
     # pulses more than once is a HIT train.
-    drive = sorted((p for p in pattern.pins if edges[p][0] and p not in roles),
-                   key=lambda p: (edges[p][0][0], len(edges[p][0])))
-    if len(drive) == 1 and len(edges[drive[0]][0]) > 1:
+    drive = [] if given else sorted((p for p in pattern.pins if edges[p][0] and p not in roles),
+                                    key=lambda p: (edges[p][0][0], len(edges[p][0])))
+    if given:
+        roles = {p: given[p] for p in pattern.pins if p in given}
+    elif len(drive) == 1 and len(edges[drive[0]][0]) > 1:
         roles[drive[0]] = "HIT"
     elif drive:
         roles[drive[0]] = "START"
@@ -466,16 +490,21 @@ def analyze(pattern, periods, busy_delay=120e-6):
         ws = [w for w in (fall_after(p, r0) for r0 in edges[p][0]) if w is not None]
         return sum(ws) / len(ws) if ws else None
 
-    start = next((p for p, role in roles.items() if role == "START"), None)
-    hit = next((p for p, role in roles.items() if role == "HIT"), None)
-    busy = next((p for p, role in roles.items() if role == "BUSY"), None)
+    start = next((p for p, role in roles.items() if GEN_ROLE.get(role, role) == "START"), None)
+    hit = next((p for p, role in roles.items() if GEN_ROLE.get(role, role) == "HIT"), None)
+    busy = next((p for p, role in roles.items() if GEN_ROLE.get(role, role) == "BUSY"), None)
     hit_rises = edges[hit][0] if hit else []
     start_rise = edges[start][0][0] if start else None
     periods_hit = [b - a for a, b in zip(hit_rises, hit_rises[1:])]
+    start_rises = edges[start][0] if start else []
+    periods_start = [b - a for a, b in zip(start_rises, start_rises[1:])]
     out = {
         "pattern": pattern.file, "label": pattern.name, "pins": pattern.pins, "roles": roles,
         "start_pin": start or "—", "hit_pin": hit or "—", "busy_pin": busy or "—",
         "start_width": width(start) if start else None,
+        "start_count": len(start_rises),
+        "start_period": sum(periods_start) / len(periods_start) if periods_start else None,
+        "generated": pattern.generated,
         "hit_count": len(hit_rises),
         "hit_period": sum(periods_hit) / len(periods_hit) if periods_hit else None,
         "hit_width": width(hit) if hit else None,
@@ -491,21 +520,25 @@ def analyze(pattern, periods, busy_delay=120e-6):
     }
     events = []
     if start_rise is not None:
-        events.append({"event": "START", "pin": start, "t": start_rise, "rel": 0.0, "width": out["start_width"]})
+        label = "OUT1" if pattern.generated else "START"
+        for i, tr in enumerate(start_rises[:200]):
+            events.append({"event": label if len(start_rises) == 1 else f"{label} {i + 1}", "pin": start, "t": tr,
+                           "rel": tr - start_rise, "width": fall_after(start, tr)})
     t0 = start_rise if start_rise is not None else (hit_rises[0] if hit_rises else 0.0)
     for i, tr in enumerate(hit_rises):
-        events.append({"event": f"HIT {i + 1}", "pin": hit, "t": tr, "rel": tr - t0,
+        events.append({"event": f"{'OUT2' if pattern.generated else 'HIT'} {i + 1}", "pin": hit, "t": tr, "rel": tr - t0,
                        "width": fall_after(hit, tr)})
     for t, w in r["waits"]:
-        events.append({"event": "等待 BUSY", "pin": busy, "t": t, "rel": t - t0 if start_rise is not None else None, "width": w})
+        events.append({"event": "等待 TRIG 边沿" if pattern.generated else "等待 BUSY", "pin": busy, "t": t, "rel": t - t0 if start_rise is not None else None, "width": w})
     events.sort(key=lambda e: e["t"])
     out["events"] = events
     used = {pattern.timeset_of(i) for i in range(len(pattern.base_ins))}
-    out["timeline"] = timeline_capture(pattern, tl, roles, min((periods[u] for u in used if u in periods), default=None))
+    out["timeline"] = timeline_capture(pattern, tl, roles, min((periods[u] for u in used if u in periods), default=None),
+                                       clock=(pattern.meta.get("summary") or {}).get("clock_mhz"))
     return out
 
 
-def timeline_capture(pattern, tl, roles, resolution=None):
+def timeline_capture(pattern, tl, roles, resolution=None, clock=None):
     """Stacked digital traces in the scope widget format {t: [ms], channels: [{name, unit, data}]}."""
     ts, chans = [], [[] for _ in pattern.pins]
     level = {"0": 0.0, "1": 1.0, "L": 0.0, "H": 1.0, "X": 0.5, "M": 0.5, "V": 0.5, "D": 0.5, "E": 0.5}
@@ -520,13 +553,20 @@ def timeline_capture(pattern, tl, roles, resolution=None):
         for slot, k in enumerate(order):
             chans[k].append(level.get(states[k] if k < len(states) else "X", 0.5) * 0.8 + 1.2 * (len(order) - 1 - slot))
         prev = states
-    names = [f"{p} ({roles[p]})" if p in roles else p for p in pattern.pins]
+    def name(p):
+        if p not in roles:
+            return p
+        if roles[p] == "CLK" and clock:
+            return f"{p} (CLK {clock:g} MHz)"
+        return f"{p} ({roles[p]})"
+    names = [name(p) for p in pattern.pins]
     return {"t": ts, "dt_ms": resolution * 1e3 if resolution else 0, "channels": [{"name": n, "unit": "", "data": c} for n, c in zip(names, chans)]}
 
 
 class Project:
-    def __init__(self, folder):
+    def __init__(self, folder, extra_dirs=()):
         self.folder = os.path.abspath(folder)
+        self.extra_dirs = [os.path.abspath(d) for d in extra_dirs]
         find = lambda ext: sorted(os.path.join(dp, f) for dp, _, fs in os.walk(self.folder) for f in fs
                                   if f.lower().endswith(ext) and ".cache" not in dp)
         self.pinmap_path = (find(".pinmap") or [None])[0]
@@ -538,16 +578,32 @@ class Project:
         self.pinmap = load_pinmap(self.pinmap_path)
         self.specs = load_specs(self.specs_path) if self.specs_path else []
         self.levels = load_levels(self.levels_path) if self.levels_path else []
-        self.timing = load_timing(self.timing_path) if self.timing_path else {}
+        self.timing = {}
+        self.timing_file = {}            # timeset -> .digitiming that defines it
         self.patterns = {}
         self.pattern_dir = os.path.join(self.folder, "Patterns")
         self.rescan()
 
+    def _walk(self):
+        for folder in [self.folder] + [d for d in self.extra_dirs if os.path.isdir(d)]:
+            for dp, _, fs in os.walk(folder):
+                if ".cache" not in dp and os.sep + "run" not in dp:
+                    yield dp, sorted(fs)
+
     def rescan(self):
         found = {}
-        for dp, _, fs in os.walk(self.folder):
+        self.timing, self.timing_file = {}, {}
+        for dp, fs in self._walk():
             for f in fs:
-                if f.lower().endswith(".digipat") and ".cache" not in dp:
+                if f.lower().endswith(".digitiming"):
+                    path = os.path.join(dp, f)
+                    for name, ts in load_timing(path).items():
+                        if name not in self.timing:
+                            self.timing[name] = ts
+                            self.timing_file[name] = path
+        for dp, fs in self._walk():
+            for f in fs:
+                if f.lower().endswith(".digipat"):
                     path = os.path.join(dp, f)
                     old = self.patterns.get(os.path.splitext(f)[0])
                     found[os.path.splitext(f)[0]] = old if old and old.mtime == os.path.getmtime(path) else Pattern(path)

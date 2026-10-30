@@ -2,9 +2,11 @@
 
 .digipat / .digicapture / .tdms written by the editor are small little-endian, non-interleaved
 TDMS files. This reads them into
-  {"props": {...}, "groups": {group: {"props": {...}, "channels": {name: [values, props, chunks]}}}}
+  {"props": {...}, "ptypes": {...},
+   "groups": {group: {"props": {...}, "ptypes": {...}, "channels": {name: [values, props, chunks, ptypes, dtype]}}}}
 where chunks lists (byte offset, count, type) of every raw data block, so fixed-size values can be
-patched in place (see patch_u32).
+patched in place (see patch_u32), and ptypes / dtype keep the TDMS types so write() can reproduce
+a file with new values.
 """
 
 import struct
@@ -75,8 +77,12 @@ def _split_path(path):
 
 
 def read(path_or_bytes):
-    data = path_or_bytes if isinstance(path_or_bytes, (bytes, bytearray)) else open(path_or_bytes, "rb").read()
-    out = {"props": {}, "groups": {}}
+    if isinstance(path_or_bytes, (bytes, bytearray)):
+        data = path_or_bytes
+    else:
+        with open(path_or_bytes, "rb") as fh:
+            data = fh.read()
+    out = {"props": {}, "ptypes": {}, "groups": {}}
     index = {}          # object path -> (dtype, count, total_bytes) of its last raw data index
     active = []         # object paths that carry raw data, in segment order
     pos = 0
@@ -109,20 +115,26 @@ def read(path_or_bytes):
                     index[opath] = (dtype, count, total)
                     if opath not in active:
                         active.append(opath)
-                props = {}
+                props, ptypes = {}, {}
                 for _ in range(r.take("I")):
                     name = r.string()
-                    props[name] = r.value(r.take("I"))
+                    ptypes[name] = r.take("I")
+                    props[name] = r.value(ptypes[name])
                 group, chan = _split_path(opath)
                 if group is None:
                     out["props"].update(props)
+                    out["ptypes"].update(ptypes)
                     continue
-                g = out["groups"].setdefault(group, {"props": {}, "channels": {}})
+                g = out["groups"].setdefault(group, {"props": {}, "ptypes": {}, "channels": {}})
                 if chan is None:
                     g["props"].update(props)
+                    g["ptypes"].update(ptypes)
                 else:
-                    c = g["channels"].setdefault(chan, [[], {}, []])
+                    c = g["channels"].setdefault(chan, [[], {}, [], {}, None])
                     c[1].update(props)
+                    c[3].update(ptypes)
+                    if opath in index:
+                        c[4] = index[opath][0]
         if toc & TOC_RAW:
             rp = body + raw_off
             while rp < end:
@@ -133,8 +145,8 @@ def read(path_or_bytes):
                     vals = _read_values(data, rp, dtype, count, total)
                     rp += total
                     if group is not None and chan is not None:
-                        c = out["groups"].setdefault(group, {"props": {}, "channels": {}})["channels"] \
-                            .setdefault(chan, [[], {}, []])
+                        c = out["groups"].setdefault(group, {"props": {}, "ptypes": {}, "channels": {}})["channels"] \
+                            .setdefault(chan, [[], {}, [], {}, dtype])
                         c[0].extend(vals)
                         c[2].append((rp - total, count, dtype))
                 if rp == start:
@@ -179,3 +191,61 @@ def patch_u32(data, tdms, group, name, index, value):
             return bytes(out)
         index -= count
     raise IndexError(f"{group}/{name}[{index}] out of range")
+
+
+# --------------------------------------------------------------------------- writing
+
+def _string(s):
+    b = s.encode("utf-8")
+    return struct.pack("<I", len(b)) + b
+
+
+def _prop(name, dtype, value):
+    out = _string(name) + struct.pack("<I", dtype)
+    if dtype == _STRING:
+        return out + _string(value)
+    if dtype == _TIMESTAMP:
+        secs = int(value)
+        return out + struct.pack("<Qq", int((value - secs) * 2.0 ** 64), secs)
+    return out + struct.pack("<" + _FIXED[dtype], value)
+
+
+def _path(group=None, chan=None):
+    q = lambda s: "'" + s.replace("'", "''") + "'"
+    return "/" if group is None else "/" + q(group) + ("" if chan is None else "/" + q(chan))
+
+
+def _segment(path, props, ptypes, dtype=None, values=None):
+    meta = struct.pack("<I", 1) + _string(path)
+    raw = b""
+    if dtype is None:
+        meta += struct.pack("<I", 0xFFFFFFFF)
+        toc = TOC_META | TOC_NEW_LIST
+    else:
+        if dtype == _STRING:
+            blobs = [v.encode("utf-8") for v in values]
+            ends, total = [], 0
+            for b in blobs:
+                total += len(b)
+                ends.append(total)
+            raw = struct.pack(f"<{len(ends)}I", *ends) + b"".join(blobs)
+            meta += struct.pack("<IIIQQ", 28, dtype, 1, len(values), len(raw))
+        else:
+            raw = struct.pack(f"<{len(values)}{_FIXED[dtype]}", *values)
+            meta += struct.pack("<IIIQ", 20, dtype, 1, len(values))
+        toc = TOC_META | TOC_NEW_LIST | TOC_RAW
+    meta += struct.pack("<I", len(props)) + b"".join(_prop(k, ptypes.get(k, _STRING), v) for k, v in props.items())
+    return b"TDSm" + struct.pack("<IIQQ", toc, 4713, len(meta) + len(raw), len(meta)) + meta + raw
+
+
+def write(tdms):
+    """Serialise a structure shaped like read()'s result (one segment per object)."""
+    out = [_segment("/", tdms["props"], tdms.get("ptypes", {}))]
+    for gname, g in tdms["groups"].items():
+        out.append(_segment(_path(gname), g["props"], g.get("ptypes", {})))
+        for cname, c in g["channels"].items():
+            values, props = c[0], c[1]
+            ptypes = c[3] if len(c) > 3 else {}
+            dtype = c[4] if len(c) > 4 and c[4] is not None else 5
+            out.append(_segment(_path(gname, cname), props, ptypes, dtype, values))
+    return b"".join(out)

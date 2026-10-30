@@ -14,6 +14,7 @@ PLUGIN = os.path.dirname(HERE)
 sys.path[:0] = [PLUGIN, os.path.join(PLUGIN, "..", "..", "sdk", "python")]
 
 import digiproj as dp  # noqa: E402
+import tdcgen  # noqa: E402
 import tdms_lite  # noqa: E402
 from tdc_6571 import Tdc6571  # noqa: E402
 
@@ -170,6 +171,86 @@ class PluginSim(unittest.TestCase):
         call(self.p, "burst", single=True)             # one outer iteration ≈ 1.4 ms
         time.sleep(0.05)
         self.assertEqual(call(self.p, "status")["result"], "PASS")
+
+
+class Generator(unittest.TestCase):
+    PINS = ["I0", "I1", "I2", "I3", "start", "stop"]
+
+    def build(self, **params):
+        pl = tdcgen.plan(params, self.PINS)
+        with open(os.path.join(PROJECT, "Patterns", "TDC_M20_2.digipat"), "rb") as fh:
+            data = tdcgen.build(pl, fh.read())
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        path = os.path.join(tmp, pl["name"] + ".digipat")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        with open(tdcgen.sidecar_path(path), "w", encoding="utf-8") as fh:
+            json.dump({"params": pl["params"], "roles": pl["roles"], "summary": tdcgen.summary(pl)}, fh)
+        sheet = tdcgen.timing_sheet(pl, self.PINS, tmp)
+        return pl, dp.Pattern(path), dp.load_timing(sheet), sheet
+
+    def test_vectors_and_encoding(self):
+        pl, p, timing, _ = self.build(name="GEN_T")
+        self.assertEqual(p.name, "GEN_T")
+        self.assertEqual(p.pins, ["I3", "I0", "I1", "I2"])            # CLK, TRIG, OUT1, OUT2
+        self.assertEqual(p.timesets, [pl["timeset"]])
+        i = p.label_names.index("WaitEdge")
+        loc = p.label_locs[i]
+        self.assertEqual(p.base_ins[loc], 0x70288000 | i)               # same wait word as WaitForBusy
+        self.assertEqual(p.base_ins[loc - 1], 0x00200000)
+        self.assertEqual(p.states[loc], "1H00")
+        self.assertTrue(all(st[0] == "1" for st in p.states))           # CLK pulses in every vector
+        self.assertEqual(p.instruction_text(len(p.base_ins) - 1), "halt")
+        self.assertAlmostEqual(timing[pl["timeset"]]["period"], 20e-9)
+
+    def test_timing_matches_request(self):
+        pl, p, timing, _ = self.build(clock_mhz=100, out1_khz=1000, out1_cycles=3, out2_khz=250, out2_cycles=8,
+                                      out2_delay_us=5, loops=4)
+        a = dp.analyze(p, {k: v["period"] for k, v in timing.items()})
+        self.assertEqual((a["start_pin"], a["hit_pin"], a["busy_pin"]), ("I1", "I2", "I0"))
+        self.assertEqual((a["start_count"], a["hit_count"], a["loops"]), (3, 8, 4))
+        self.assertAlmostEqual(a["start_period"], 1e-6, delta=1e-12)
+        self.assertAlmostEqual(a["hit_period"], 4e-6, delta=1e-12)
+        self.assertAlmostEqual(a["start_to_hit"], 5e-6, delta=1e-12)
+
+    def test_falling_edge_and_quantisation(self):
+        pl, p, _, _ = self.build(edge="falling", clock_mhz=100, out2_khz=300)
+        i = p.label_names.index("WaitEdge")
+        self.assertEqual(p.states[p.label_locs[i]][1], "L")
+        self.assertTrue(pl["warnings"])                                  # 300 kHz is not a whole number of 10 ns
+
+    def test_timing_sheet_has_rl_clock(self):
+        import xml.etree.ElementTree as ET
+        pl, _, _, sheet = self.build()
+        root = ET.parse(sheet).getroot()
+        edges = {e.get("pin"): [dp._local(c.tag) for c in e] for e in root.iter() if dp._local(e.tag) == "PinEdge"}
+        self.assertIn("DriveReturnLow", edges["I3"])
+        self.assertIn("DriveNonReturn", edges["I0"])
+        self.assertEqual(set(edges), set(self.PINS))
+
+    def test_rejects_bad_input(self):
+        for bad in ({"out1_pin": "I0"}, {"name": "1abc"}, {"clock_mhz": 500}, {"out2_pin": "Q9"}, {"loops": 0}):
+            with self.assertRaises(tdcgen.GenError):
+                tdcgen.plan(bad, self.PINS)
+
+    def test_plugin_generate_and_save(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        shutil.copytree(PROJECT, os.path.join(tmp, "P"))
+        p = Tdc6571({"simulate": True, "options": {"project": os.path.join(tmp, "P"), "work_dir": os.path.join(tmp, "w")}})
+        r = call(p, "generate", name="GEN_P", out2_cycles=4)
+        self.assertEqual(r["name"], "GEN_P")
+        s = call(p, "summary")
+        self.assertEqual((s["pattern"], s["hit_count"], s["gen"]["vectors"]), ("GEN_P", 4, r["vectors"]))
+        with self.assertRaises(AssertionError):
+            call(p, "generate", name="TDC_M20_2")                          # would shadow a project pattern
+        call(p, "burst")
+        time.sleep(0.05)
+        self.assertEqual(call(p, "status")["result"], "PASS")
+        saved = call(p, "save_generated")
+        self.assertTrue(os.path.exists(saved["saved"]) and os.path.exists(saved["timing"]))
+        self.assertIn("GEN_P", [o["value"] for o in call(p, "list_patterns")["patterns"]])
 
 
 if __name__ == "__main__":

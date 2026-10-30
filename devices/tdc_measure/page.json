@@ -360,6 +360,84 @@
      ]
     },
     {
+     "title": "TRIG 激励（仿真）",
+     "subtitle": "打开手动触发后点运行：图形停在 TRIG 等待循环里，每给一个上升沿执行一次测量；测量中给的沿会被错过",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "switch",
+       "label": "手动触发",
+       "init": {
+        "method": "trigger_mode",
+        "field": "manual"
+       },
+       "action": {
+        "method": "set_trigger_mode",
+        "args": {
+         "manual": "$value"
+        }
+       },
+       "id": "manual_g"
+      },
+      {
+       "type": "button",
+       "id": "trig_once_g",
+       "label": "给 TRIG 上升沿 ↑",
+       "style": "primary",
+       "action": {
+        "method": "trigger",
+        "args": {
+         "count": 1
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "number",
+       "id": "trig_n_g",
+       "label": "次数",
+       "unit": "",
+       "value": 10,
+       "min": 1,
+       "max": 65535,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "id": "trig_many_g",
+       "label": "连续触发 N 次",
+       "style": "secondary",
+       "action": {
+        "method": "trigger",
+        "args": {
+         "count": "$form.trig_n_g"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "readout",
+       "label": "TRIG",
+       "source": "st",
+       "field": "trig_text"
+      },
+      {
+       "type": "readout",
+       "label": "已给沿",
+       "source": "st",
+       "field": "triggers"
+      },
+      {
+       "type": "readout",
+       "label": "错过",
+       "source": "st",
+       "field": "missed"
+      }
+     ]
+    },
+    {
      "title": "实际输出",
      "span": 12,
      "layout": "row",
@@ -701,6 +779,84 @@
        "source": "st",
        "field": "fail_text",
        "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "TRIG 激励（仿真）",
+     "subtitle": "打开手动触发后点运行：图形停在 TRIG 等待循环里，每给一个上升沿执行一次测量；测量中给的沿会被错过",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "switch",
+       "label": "手动触发",
+       "init": {
+        "method": "trigger_mode",
+        "field": "manual"
+       },
+       "action": {
+        "method": "set_trigger_mode",
+        "args": {
+         "manual": "$value"
+        }
+       },
+       "id": "manual_r"
+      },
+      {
+       "type": "button",
+       "id": "trig_once_r",
+       "label": "给 TRIG 上升沿 ↑",
+       "style": "primary",
+       "action": {
+        "method": "trigger",
+        "args": {
+         "count": 1
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "number",
+       "id": "trig_n_r",
+       "label": "次数",
+       "unit": "",
+       "value": 10,
+       "min": 1,
+       "max": 65535,
+       "step": 1,
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "id": "trig_many_r",
+       "label": "连续触发 N 次",
+       "style": "secondary",
+       "action": {
+        "method": "trigger",
+        "args": {
+         "count": "$form.trig_n_r"
+        }
+       },
+       "publish": "st"
+      },
+      {
+       "type": "readout",
+       "label": "TRIG",
+       "source": "st",
+       "field": "trig_text"
+      },
+      {
+       "type": "readout",
+       "label": "已给沿",
+       "source": "st",
+       "field": "triggers"
+      },
+      {
+       "type": "readout",
+       "label": "错过",
+       "source": "st",
+       "field": "missed"
       }
      ]
     },

@@ -324,7 +324,18 @@ private:
                     throw PluginError(DM_E_STATE, p.file + " 的时序集不在同一个已知的时序表里");
             // run time of this burst: the program with a jittered BUSY (a simulated 6571 waits this long)
             const tdc::RunResult rr = p.run(project_->periods(), busy_delay_, &rng_);
-            const double est = single ? (rr.outer_iteration >= 0 ? rr.outer_iteration : rr.total) : rr.total;
+            double est = single ? (rr.outer_iteration >= 0 ? rr.outer_iteration : rr.total) : rr.total;
+            // Manual trigger (simulation): the program stops in every TRIG wait loop until the user
+            // gives an edge. One measurement = the part of an iteration outside the wait.
+            const bool manual = manual_trigger_ && simulate_ && !rr.waits.empty();
+            double active = 0;
+            if (manual) {
+                const double iter = rr.outer_iteration >= 0 ? rr.outer_iteration : rr.total;
+                double waited = 0;
+                for (auto& w : rr.waits) waited += w.second;
+                active = std::max(iter - waited, 1e-9);
+                est = 1e9;                                   // the simulated 6571 runs until the task stops it
+            }
             const std::string dev = instrument();
             const std::string path = run_file(p, single);
             try {
@@ -347,6 +358,14 @@ private:
             run_.iteration = an["iteration"].as_number();
             run_.loops = single ? 1 : an["loops"].as_int(1);
             run_.pins = p.pins;
+            run_.manual = manual;
+            run_.active = active;
+            if (manual) {
+                run_.est = active * run_.loops;
+                log("info", "burst " + p.file + "（手动触发）：每次 TRIG 上升沿执行一次测量，共 " + std::to_string(run_.loops) + " 次");
+                return status();
+            }
+            if (manual_trigger_ && simulate_) log("warning", p.file + " 没有等待 TRIG 的循环，按自动方式运行");
             log("info", "burst " + p.file + "（标签 " + p.name + (single ? "，单次" : "") + "，" + dev + "），预计 " + tdc::fmt_time(est));
             return status();
         });
@@ -362,6 +381,36 @@ private:
         });
 
         method("status", "Burst state, progress and result", {}, [this](const Json&) { return status(); });
+
+        method("set_trigger_mode", "[sim] manual=true: a burst waits in each TRIG wait loop until trigger() is called",
+               {"manual"}, [this](const Json& a) {
+            manual_trigger_ = a.boolean("manual", false);
+            log("info", manual_trigger_ ? "仿真触发：手动（点“给 TRIG 上升沿”）" : "仿真触发：自动（芯片转换完 BUSY 自动拉高）");
+            return kv("manual", manual_trigger_);
+        });
+
+        method("trigger_mode", "[sim] current trigger mode", {}, [this](const Json&) {
+            return Json{{"manual", manual_trigger_}, {"text", manual_trigger_ ? "手动" : "自动"}};
+        });
+
+        method("trigger", "[sim] Give TRIG a low->high edge (count edges); an edge during a measurement is missed",
+               {"count"}, [this](const Json& a) {
+            if (!simulate_) throw PluginError(DM_E_STATE, "真机上 TRIG 由外部信号驱动");
+            if (run_.state != "running" || !run_.manual)
+                throw PluginError(DM_E_STATE, "没有在等待 TRIG 的运行：先打开“手动触发”，再点运行");
+            const int n = std::max(1, std::min(a.integer("count", 1), 65535));
+            advance();
+            if (run_.measuring) {
+                ++run_.missed;
+                log("warning", "TRIG ↑ 来得太早：测量还没结束，图形不在等待循环里，这个沿被错过");
+            } else {
+                run_.pending += n;
+                log("info", n == 1 ? "TRIG ↑（第 " + std::to_string(run_.triggers + 1) + " 次）"
+                                   : "TRIG ↑ × " + std::to_string(n));
+            }
+            run_.triggers += n;
+            return status();
+        });
 
         // ---- project sheets ----
         method("specs", "Specifications as editable rows (params widget)", {}, [this](const Json&) {
@@ -592,10 +641,46 @@ private:
         return out;
     }
 
+    // Manual-trigger run: finish the measurement in progress, start the next one if an edge is
+    // pending, and stop the simulated instrument after the last measurement.
+    void advance()
+    {
+        Run& st = run_;
+        if (st.state != "running" || !st.manual) return;
+        const auto now = Clock::now();
+        bool chained = false;
+        for (;;) {
+            if (st.measuring) {
+                if (now < st.seg_end) return;
+                st.measuring = false;
+                chained = true;
+                ++st.done;
+                st.busy_time += st.active;
+                if (st.done >= st.loops) {
+                    try { host_call(digital_, "pattern_abort"); } catch (const PluginError&) {}
+                    st.state = "done";
+                    st.t_end = now;
+                    st.ended = true;
+                    st.pass = true;
+                    log("info", st.pattern + " 完成：通过，" + std::to_string(st.done) + " 次测量" +
+                                    (st.missed ? "，错过 " + std::to_string(st.missed) + " 个 TRIG 沿" : ""));
+                    return;
+                }
+            }
+            if (st.pending <= 0) return;
+            --st.pending;
+            st.measuring = true;
+            // queued edges run back to back; a fresh edge starts the measurement now
+            st.seg_start = chained ? st.seg_end : now;
+            st.seg_end = st.seg_start + std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(st.active));
+        }
+    }
+
     Json status()
     {
         Run& st = run_;
-        if (st.state == "running") {
+        advance();
+        if (st.state == "running" && !st.manual) {
             const double elapsed = secs(Clock::now() - st.t0);
             try {
                 const Json r = host_call(digital_, "pattern_status", kv("pins", [&] { Json p = Json::array(); for (auto& x : st.pins) p.push_back(x); return p; }()));
@@ -625,20 +710,32 @@ private:
         if (st.state != "idle" && !st.pattern.empty() && st.t0 != Clock::time_point{}) {
             const double elapsed = secs((st.ended ? st.t_end : Clock::now()) - st.t0);
             const double est = std::max(st.est, 1e-9);
-            const int done = st.state == "done" ? st.loops
+            const int done = st.manual ? st.done
+                             : st.state == "done" ? st.loops
                              : st.iteration > 0 ? std::min(st.loops, int(elapsed / st.iteration)) : 0;
             out["elapsed"] = elapsed;
             out["elapsed_text"] = tdc::fmt_time(elapsed);
             out["est_text"] = tdc::fmt_time(st.est);
-            out["progress"] = st.state == "done" ? 100.0 : std::min(99.9, 100.0 * elapsed / est);
+            out["progress"] = st.state == "done" ? 100.0
+                            : st.manual ? 100.0 * st.done / std::max(1, st.loops)
+                                        : std::min(99.9, 100.0 * elapsed / est);
             out["loops_done"] = done;
             out["loops"] = st.loops;
             out["time_text"] = tdc::fmt_time(elapsed, 3) + " / " + tdc::fmt_time(st.est, 3);
             out["loops_text"] = std::to_string(done) + " / " + std::to_string(st.loops);
+            if (st.manual)
+                out["time_text"] = "测 " + tdc::fmt_time(st.busy_time, 3) + " · 等 " + tdc::fmt_time(std::max(0.0, elapsed - st.busy_time), 3);
         } else {
             out["time_text"] = "—";
             out["loops_text"] = "—";
         }
+        out["manual"] = st.manual;
+        out["triggers"] = st.triggers;
+        out["missed"] = st.missed;
+        out["waiting"] = st.state == "running" && st.manual && !st.measuring && st.pending == 0;
+        out["trig_text"] = !(st.state == "running" && st.manual) ? (manual_trigger_ ? "手动触发：点运行后等待 TRIG" : "自动")
+                           : st.measuring ? "测量中（第 " + std::to_string(st.done + 1) + " 次）"
+                           : "等待 TRIG 上升沿（已测 " + std::to_string(st.done) + " / " + std::to_string(st.loops) + "）";
         if (st.state == "done" || st.state == "aborted" || st.state == "error") {
             out["pass"] = st.pass;
             out["result"] = st.pass.is_bool() ? (st.pass.as_bool() ? "PASS" : "FAIL")
@@ -662,12 +759,17 @@ private:
         int loops = 1;
         Json pass, fails = Json::object();
         std::vector<std::string> pins;
+        // manual trigger (simulation)
+        bool manual = false, measuring = false;
+        double active = 0, busy_time = 0;          // one measurement / all measurements so far [s]
+        int done = 0, pending = 0, triggers = 0, missed = 0;
+        Clock::time_point seg_start{}, seg_end{};
     };
 
     std::string plugin_dir_, work_, gen_dir_, gen_template_, current_, digital_;
     std::unique_ptr<tdc::Project> project_;
     double busy_delay_ = 120e-6;
-    bool simulate_ = true, instrument_ready_ = false;
+    bool simulate_ = true, instrument_ready_ = false, manual_trigger_ = false;
     std::map<std::string, std::string> spec_values_;
     std::map<std::string, Json> cache_;
     Json gen_last_ = Json::object();

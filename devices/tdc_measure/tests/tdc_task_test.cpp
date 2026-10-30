@@ -229,6 +229,33 @@ int main(int argc, char** argv)
     wait_ms(60);
     CHECK(call("status").str("result") == "PASS", "single PASS");
 
+    std::printf("manual trigger\n");
+    {
+        call("set_trigger_mode", kv("manual", true));
+        call("select", kv("name", "TDC_M20_2"));
+        call("set_count", Json{{"name", "v01 set_loop"}, {"value", 3}});      // 3 measurements
+        Json st0 = call("burst");
+        CHECK(st0.boolean("manual", false) && st0.boolean("waiting", false), "waits for TRIG");
+        wait_ms(30);
+        CHECK(call("status").integer("loops_done", -1) == 0, "no edge, no measurement");
+        call("trigger");
+        call("trigger");                                          // ~1.2 ms measurement: this edge comes too early
+        wait_ms(30);
+        Json m = call("status");
+        CHECK(m.integer("loops_done", -1) == 1 && m.integer("missed", 0) == 1, "done %d missed %d",
+              m.integer("loops_done", -1), m.integer("missed", 0));
+        CHECK(m.str("state") == "running" && m.boolean("waiting", false), "back in the wait loop");
+        call("trigger", kv("count", 5));                          // queued edges run back to back
+        wait_ms(40);
+        m = call("status");
+        CHECK(m.str("state") == "done" && m.str("result") == "PASS" && m.integer("loops_done", 0) == 3, "manual done %s %d",
+              m.str("state").c_str(), m.integer("loops_done", 0));
+        call("trigger", Json::object(), &rc);
+        CHECK(rc == DM_E_STATE, "trigger without a waiting run refused");
+        call("revert");
+        call("set_trigger_mode", kv("manual", false));
+    }
+
     std::printf("generator\n");
     Json g = call("generate", Json{{"name", "GEN_A"}, {"clock_mhz", 100}, {"out1_khz", 1000}, {"out1_cycles", 3},
                                    {"out2_khz", 250}, {"out2_cycles", 8}, {"out2_delay_us", 5}, {"loops", 4}});

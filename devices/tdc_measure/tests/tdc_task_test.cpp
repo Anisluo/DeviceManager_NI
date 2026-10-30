@@ -234,19 +234,22 @@ int main(int argc, char** argv)
         call("set_trigger_mode", kv("manual", true));
         call("select", kv("name", "TDC_M20_2"));
         call("set_count", Json{{"name", "v01 set_loop"}, {"value", 3}});      // 3 measurements
+        call("set_count", Json{{"name", "v16 repeat"}, {"value", 20}});     // longer measurement, so the 2nd edge is early
+        const int meas_ms = int(call("summary").number("iteration", 0) * 1000) + 1;
+        std::printf("  one measurement %d ms\n", meas_ms);
         Json st0 = call("burst");
         CHECK(st0.boolean("manual", false) && st0.boolean("waiting", false), "waits for TRIG");
         wait_ms(30);
         CHECK(call("status").integer("loops_done", -1) == 0, "no edge, no measurement");
         call("trigger");
-        call("trigger");                                          // ~1.2 ms measurement: this edge comes too early
-        wait_ms(30);
+        call("trigger");                                          // still measuring: this edge comes too early
+        wait_ms(meas_ms + 30);
         Json m = call("status");
         CHECK(m.integer("loops_done", -1) == 1 && m.integer("missed", 0) == 1, "done %d missed %d",
               m.integer("loops_done", -1), m.integer("missed", 0));
         CHECK(m.str("state") == "running" && m.boolean("waiting", false), "back in the wait loop");
         call("trigger", kv("count", 5));                          // queued edges run back to back
-        wait_ms(40);
+        wait_ms(2 * meas_ms + 50);
         m = call("status");
         CHECK(m.str("state") == "done" && m.str("result") == "PASS" && m.integer("loops_done", 0) == 3, "manual done %s %d",
               m.str("state").c_str(), m.integer("loops_done", 0));

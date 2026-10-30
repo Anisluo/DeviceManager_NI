@@ -155,7 +155,8 @@ class PatternProjectEditor(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_edit_and_burst_through_the_driver(self):
-        self.assertEqual(call(self.p, "pe.info")["current"], "main")
+        self.assertEqual(call(self.p, "pe.info")["current"], "TDC_M20_2")
+        self.assertGreater(len(call(self.p, "pe.vectors")["rows"]), 1)
         call(self.p, "pe.edit_vector", v=0, field="pin:I0", value="1")
         self.assertTrue(call(self.p, "pe.vectors")["modified"])
         call(self.p, "pe.pattern_save")

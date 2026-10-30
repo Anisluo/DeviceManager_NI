@@ -10,6 +10,7 @@ that run on the bench.
 """
 
 import os
+import shutil
 import time
 
 from dm.plugin import Plugin, PluginError, method, to_json, E_FAIL, E_HW, E_STATE
@@ -518,12 +519,15 @@ class NiDigital(Plugin):
                 raise PluginError("没有找到 tdc_measure 插件的运行库，图形工程不可用", E_STATE)
             work = os.path.join(self.config.get("plugin_dir") or os.path.dirname(os.path.abspath(__file__)), "_work")
             projects = self.options.get("projects_dir") or os.path.join(work, "projects")
+            demo = os.path.join(projects, "DemoPrj-TDC")        # a copy: the task keeps its own project
+            if not os.path.exists(demo):
+                shutil.copytree(os.path.join(used["dir"], "project", "DemoPrj-TDC"), demo)
             self.pattern_core = PatternCore(used["library"], {
                 "plugin_dir": used["dir"], "resource": self.resource, "simulate": self.simulate,
                 "instruments": {"digital": "self"},
-                "options": {"project": os.path.join(projects, "MyProject"), "create_project": True,
+                "options": {"project": demo,
                             "projects_dir": projects, "work_dir": os.path.join(work, "editor"),
-                            "instrument_name": self.resource, "pattern": "main"},
+                            "instrument_name": self.resource, "pattern": "TDC_M20_2"},
             }, self._dm_invoke_json, self._core_event, os.path.join(work, "editor"))
         return self.pattern_core
 

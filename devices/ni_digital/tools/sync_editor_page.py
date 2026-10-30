@@ -143,7 +143,7 @@ def main():
             s["interval_ms"] = max(s.get("interval_ms", 2000), 1000)
 
     # the documents of a Digital Pattern Editor project, in its order
-    titles = {"工程", "引脚映射", "规格", "电平", "时序", "图形编辑"}
+    titles = {"工程", "引脚映射", "规格", "电平", "时序", "向量 Vector", "图形编辑"}
     page["tabs"] = [t for t in page["tabs"] if t["title"] not in titles and t["title"] not in ("向量", "电平 / 时序")]
     project = json.loads(json.dumps(PROJECT_TAB))
     project["sections"] += [s for s in tabs["运行"]["sections"] if s["title"] in RUN_SECTIONS]
@@ -172,7 +172,7 @@ def main():
                 {"title": "规格", "sections": [SPEC_SECTION]},
                 {"title": "电平", "sections": [levels]},
                 {"title": "时序", "sections": [timesets, edges]},
-                {"title": "图形编辑", "sections": pattern["sections"]}):
+                {"title": "向量 Vector", "sections": pattern["sections"]}):
         page["tabs"].append(rewrite(json.loads(json.dumps(tab))))
 
     with open(PAGE, "w", encoding="utf-8", newline="\n") as f:

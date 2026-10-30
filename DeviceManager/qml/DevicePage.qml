@@ -28,6 +28,7 @@ Item {
     signal sourceUpdated(string id, var data)
     signal deviceEvent(var evt)
     signal reinitRequested()
+    signal flushRequested()            // commit what a widget is still editing, before an action
 
     function load() {
         page = device ? App.page(device.pluginId) : ({ error: "设备不存在" })
@@ -38,6 +39,7 @@ Item {
     // Run a widget action: substitute "$value" into args and call the device.
     function act(action, value, cb) {
         if (!action || !action.method || !device) { if (cb) cb(false, null); return }
+        flushRequested()
         const args = Fmt.substitute(action.args || {}, value, form)
         device.call(action.method, args, (ok, res) => {
             if (!ok) ctx.deviceEvent({ type: "log", level: "error",

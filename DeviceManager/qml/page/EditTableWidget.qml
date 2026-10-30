@@ -36,6 +36,8 @@ ColumnLayout {
     property int editRow: -1                // the cell being edited
     property int editCol: -1
     property string editSeed: ""            // first character typed, replaces the cell
+    property var closeEditor: null          // commits the open editor; the FocusScope keeps focus inside it
+    readonly property var editColumn: columns[editCol] || ({})   // survives editCol going to -1 first
     readonly property int rowH: 30
     readonly property int headerH: 34
     readonly property var pins: spec.pin_columns ? (Fmt.field(sourceData, spec.pin_columns.field) || []) : []
@@ -60,6 +62,7 @@ ColumnLayout {
 
     Connections {
         target: w.ctx
+        function onFlushRequested() { w.commitEdit() }
         function onSourceUpdated(id, data) {
             if (id !== w.spec.source) return
             const r = w.spec.rows_field ? Fmt.field(data, w.spec.rows_field) : [data]
@@ -83,7 +86,7 @@ ColumnLayout {
     }
     function valueOf(row, col) {
         if (col.pin !== undefined) return String(Fmt.field(row, spec.pin_columns.states) || "").charAt(col.pinIndex)
-        const v = Fmt.field(row, col.field)
+        const v = col.field ? Fmt.field(row, col.field) : undefined
         return v === undefined || v === null ? "" : String(v)
     }
     function optionsOf(col) { return col.options_field ? (Fmt.field(sourceData, col.options_field) || []) : (col.options || []) }
@@ -163,6 +166,7 @@ ColumnLayout {
         write(cells)
     }
     function runAction(a) {
+        commitEdit()
         if (curRow < 0) return
         if (a.range) {
             const args = keyArgs(rows[a.at === "bottom" ? selBottom : selTop])
@@ -184,6 +188,7 @@ ColumnLayout {
         next(0)
     }
     function undo() {
+        commitEdit()
         if (!spec.undo) { say("这张表回车即写入文件，可用“还原工程文件”恢复"); return }
         ctx.device.call(spec.undo, {}, (ok, res) => { if (ok) say(""); else failed(spec.undo, res); refresh() })
     }
@@ -229,8 +234,10 @@ ColumnLayout {
         editRow = curRow
         editCol = curCol
     }
+    function commitEdit() { if (closeEditor) closeEditor() }
     function finishEdit(value, move) {
         const r = editRow, c = editCol
+        closeEditor = null
         editRow = -1
         editCol = -1
         if (value !== undefined) write([{ r: r, c: c, value: value }])
@@ -407,9 +414,9 @@ ColumnLayout {
                     active: rowItem.index === w.editRow && w.editCol >= 0
                     x: active ? w.xOf(w.editCol) : 0
                     z: 3
-                    width: active ? w.widthOf(w.columns[w.editCol]) : 0
+                    width: active ? w.widthOf(w.editColumn) : 0
                     height: w.rowH
-                    sourceComponent: active && w.columns[w.editCol].editor === "combo" ? comboEditor : textEditor
+                    sourceComponent: w.editColumn.editor === "combo" ? comboEditor : textEditor
                 }
                 Component {
                     id: textEditor
@@ -428,12 +435,13 @@ ColumnLayout {
                             color: Theme.text
                             selectionColor: Theme.accentSoft
                             selectedTextColor: Theme.text
-                            font.family: w.columns[w.editCol].mono ? Theme.mono : Theme.sans
+                            font.family: w.editColumn.mono ? Theme.mono : Theme.sans
                             font.pixelSize: Theme.fontSm
                             property bool closing: false
                             function close(value, move) { closing = true; w.finishEdit(value, move) }
                             Component.onCompleted: {
-                                text = w.editSeed !== "" ? w.editSeed : w.valueOf(rowItem.row, w.columns[w.editCol])
+                                text = w.editSeed !== "" ? w.editSeed : w.valueOf(rowItem.row, w.editColumn)
+                                w.closeEditor = () => close(text, "")
                                 forceActiveFocus()
                                 if (w.editSeed === "") selectAll()
                             }
@@ -455,10 +463,14 @@ ColumnLayout {
                     DmComboBox {
                         id: combo
                         font.pixelSize: Theme.fontSm
-                        readonly property var options: w.optionsOf(w.columns[w.editCol])
+                        readonly property var options: w.optionsOf(w.editColumn)
                         model: options
-                        currentIndex: options.indexOf(w.valueOf(rowItem.row, w.columns[w.editCol]))
-                        Component.onCompleted: { forceActiveFocus(); popup.open() }
+                        currentIndex: options.indexOf(w.valueOf(rowItem.row, w.editColumn))
+                        Component.onCompleted: {
+                            w.closeEditor = () => w.finishEdit(undefined, "")
+                            forceActiveFocus()
+                            popup.open()
+                        }
                         onActivated: index => w.finishEdit(options[index], "")
                         Connections {
                             target: combo.popup
@@ -487,6 +499,7 @@ ColumnLayout {
                 return r >= 0 ? r : y < w.headerH ? Math.max(0, w.curRow - 1) : w.rows.length - 1
             }
             onPressed: e => {
+                w.commitEdit()
                 focusScope.forceActiveFocus()
                 const c = w.colAt(list.contentX + e.x)
                 if (e.y < w.headerH) {                     // header: the whole column

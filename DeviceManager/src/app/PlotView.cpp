@@ -738,9 +738,7 @@ void PlotView::paint(QPainter* p)
     // ---- rubber band
     if (m_drag == Drag::Box) {
         QRectF r = QRectF(m_press, m_last).normalized().intersected(m_plot);
-        if (m_zoomAxis == QLatin1String("x")) r = QRectF(r.left(), mt, r.width(), ph);
-        else if (m_zoomAxis == QLatin1String("y")) r = QRectF(ml, r.top(), pw, r.height());
-        else if (r.width() < kMinBox && r.height() >= kMinBox) r = QRectF(ml, r.top(), pw, r.height());
+        if (r.width() < kMinBox && r.height() >= kMinBox) r = QRectF(ml, r.top(), pw, r.height());
         else if (r.height() < kMinBox && r.width() >= kMinBox) r = QRectF(r.left(), mt, r.width(), ph);
         QColor fill = m_accent;
         fill.setAlphaF(0.12f);
@@ -789,10 +787,10 @@ void PlotView::paint(QPainter* p)
 
     // ---- zoom state / how-to hint
     QString hint;
-    if (m_zoomAxis == QLatin1String("x")) hint = QStringLiteral("X 轴已选中：拖框只放大 X · 再点 X 轴取消");
-    else if (m_zoomAxis == QLatin1String("y")) hint = QStringLiteral("Y 轴已选中：拖框只放大 Y · 再点 Y 轴取消");
+    if (m_zoomAxis == QLatin1String("x")) hint = QStringLiteral("X 轴已选中：滚轮只缩放 X · 再点 X 轴取消");
+    else if (m_zoomAxis == QLatin1String("y")) hint = QStringLiteral("Y 轴已选中：滚轮只缩放 Y · 再点 Y 轴取消");
     else if (hovering && m_interactive && !m_cursors)
-        hint = QStringLiteral("点 X 轴或 Y 轴后拖框，只放大该轴 · 滚轮缩放 · 右键平移");
+        hint = QStringLiteral("点 X 轴或 Y 轴后滚轮只缩放该轴 · 拖框放大 · 右键平移");
 
     // "自适应" button: back to automatic ranges (always shown, emphasised when zoomed)
     m_fitBtn = QRectF();
@@ -937,15 +935,13 @@ void PlotView::mouseReleaseEvent(QMouseEvent* e)
     }
     const bool click = QLineF(m_press, pos).length() < 4;
     if (click && (m_drag == Drag::AxisX || m_drag == Drag::AxisY)) {
-        // a click (no drag) on an axis selects it for box zoom; clicking it again deselects
+        // a click (no drag) on an axis selects it for wheel zoom; clicking it again deselects
         const QString a = m_drag == Drag::AxisX ? QStringLiteral("x") : QStringLiteral("y");
         setZoomAxis(m_zoomAxis == a ? QString() : a);
     }
     if (m_drag == Drag::Box) {
         const QRectF r = QRectF(m_press, pos).normalized().intersected(m_plot);
-        bool zx = r.width() >= kMinBox, zy = r.height() >= kMinBox;
-        if (m_zoomAxis == QLatin1String("x")) zy = false;
-        else if (m_zoomAxis == QLatin1String("y")) zx = false;
+        const bool zx = r.width() >= kMinBox, zy = r.height() >= kMinBox;
         if (zx) {
             const double lo = fromPx(r.left()), hi = fromPx(r.right());
             if (validSpan(lo, hi)) { m_x0 = lo; m_x1 = hi; m_autoX = false; }
@@ -983,8 +979,8 @@ void PlotView::wheelEvent(QWheelEvent* e)
     const double f = std::pow(kWheelStep, steps);
     double fx = f, fy = f;
     int mask = 3;
-    if (r == Region::XAxis || (e->modifiers() & Qt::ControlModifier)) fy = 1;
-    else if (e->modifiers() & Qt::ShiftModifier) fx = 1;
+    if (r == Region::XAxis || m_zoomAxis == QLatin1String("x") || (e->modifiers() & Qt::ControlModifier)) fy = 1;
+    else if (m_zoomAxis == QLatin1String("y") || (e->modifiers() & Qt::ShiftModifier)) fx = 1;
     if (r == Region::YLeft) { fx = 1; fy = f; mask = 1; }
     if (r == Region::YRight) { fx = 1; fy = f; mask = 2; }
     zoomAxes(fx, fy, pos, mask);

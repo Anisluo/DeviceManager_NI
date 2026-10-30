@@ -185,7 +185,8 @@ int main(int argc, char** argv)
     CHECK(near(r.yspan(), ys0 * std::exp(-1.0), 1e-6));
     r.reset();
 
-    // ---- click an axis to select it; then a box zooms only that axis; "自适应" restores
+    // ---- click an axis to select it; then the wheel zooms only that axis and a box still zooms
+    //      both; "自适应" restores
     {
         auto click = [&](QPointF p) {
             r.mouse(QEvent::MouseButtonPress, p, Qt::LeftButton, Qt::LeftButton);
@@ -198,25 +199,31 @@ int main(int argc, char** argv)
         click(QPointF(c.x(), pr.bottom() + 10));
         CHECK(plot.zoomAxis() == "x");
         r.save("plot_axis_x_selected.png");
-        r.drag(a, b);                                      // a square box, X only
-        CHECK(near(r.xspan(), xs0 * 0.5, 1e-3));
+        r.wheel(c, 120);                                   // wheel over the plot, X only
+        CHECK(r.xspan() < xs0 * 0.99);
         CHECK(near(r.yspan(), ys0));
         r.render();
         r.save("plot_axis_x_zoomed.png");
         CHECK(!plot.autoRange());
+        r.reset();
+        r.drag(a, b);                                      // a box still zooms both
+        CHECK(near(r.xspan(), xs0 * 0.5, 1e-3));
+        CHECK(near(r.yspan(), ys0 * 0.5, 1e-3));
+        r.render();
         const QRectF fit = plot.fitButtonRect();
         CHECK(!fit.isEmpty());
         QThread::msleep(500);                                 // not a double click
         click(fit.center());
         CHECK(plot.autoRange());
         CHECK(near(r.xspan(), xs0));
-        CHECK(plot.zoomAxis() == "x");                     // the selection stays for the next box
+        CHECK(plot.zoomAxis() == "x");                     // the selection stays after a fit
         QThread::msleep(500);
         click(QPointF(pr.left() - 10, c.y()));             // select Y instead
         CHECK(plot.zoomAxis() == "y");
-        r.drag(a, b);
+        r.wheel(c, 120);
         CHECK(near(r.xspan(), xs0));
-        CHECK(near(r.yspan(), ys0 * 0.5, 1e-3));
+        CHECK(r.yspan() < ys0 * 0.99);
+        r.reset();
         QThread::msleep(500);
         click(QPointF(pr.left() - 10, c.y()));             // click again: deselect
         CHECK(plot.zoomAxis().isEmpty());

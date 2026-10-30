@@ -265,8 +265,54 @@ void levels_add(std::string& x, const std::string& pin, const std::string& copy_
 
 void levels_remove(std::string& x, const std::string& pin) { erase_lines(x, need(find_level(x, pin), pin + " 的电平")); }
 
-// =========================================================================== pin map
+// =========================================================================== specifications
 
+static Elem find_section(const std::string& x, const std::string& section)
+{
+    return find_elem(x, "Section", 0, x.size(), "name", section);
+}
+
+static Elem find_formula(const std::string& x, const std::string& section, const std::string& symbol)
+{
+    const Elem s = need(find_section(x, section), "规格分组 " + section);
+    return need(find_elem(x, "f:Formula", s.inner, s.inner_end, "symbol", symbol), "规格 " + section + "." + symbol);
+}
+
+void specs_set(std::string& x, const std::string& section, const std::string& symbol, const std::string& field,
+               const std::string& text)
+{
+    const Elem f = find_formula(x, section, symbol);
+    const std::string tag = "f:" + field;
+    if (const Elem e = find_elem(x, tag, f.inner, f.inner_end)) {
+        if (e.self_closed) x.replace(e.begin, e.end - e.begin, "<" + tag + ">" + xml_escape(text) + "</" + tag + ">");
+        else set_inner(x, e, text);
+        return;
+    }
+    const std::string ind = indent_at(x, f.begin) + "  ";
+    insert_before_close(x, f, ind + "<" + tag + ">" + xml_escape(text) + "</" + tag + ">" + eol_of(x));
+}
+
+void specs_add(std::string& x, const std::string& section, const std::string& symbol, const std::string& definition)
+{
+    const std::string eol = eol_of(x);
+    Elem s = find_section(x, section);
+    if (!s) {
+        const Elem root = need(find_elem(x, "Specifications", 0, x.size()), "Specifications");
+        insert_before_close(x, root, "  <Section name=\"" + xml_escape(section) + "\">" + eol + "  </Section>" + eol);
+        s = find_section(x, section);
+    }
+    if (find_elem(x, "f:Formula", s.inner, s.inner_end, "symbol", symbol)) throw std::invalid_argument("已有规格 " + section + "." + symbol);
+    const std::string ind = indent_at(x, s.begin) + "  ";
+    insert_before_close(x, s, ind + "<f:Formula symbol=\"" + xml_escape(symbol) + "\">" + eol + ind + "  <f:Definition>" +
+                                  xml_escape(definition) + "</f:Definition>" + eol + ind + "</f:Formula>" + eol);
+}
+
+void specs_remove(std::string& x, const std::string& section, const std::string& symbol)
+{
+    erase_lines(x, find_formula(x, section, symbol));
+}
+
+// =========================================================================== pin map
 void pinmap_add_pin(std::string& x, const std::string& pin)
 {
     if (find_elem(x, "DUTPin", 0, x.size(), "name", pin)) throw std::invalid_argument("已有引脚 " + pin);

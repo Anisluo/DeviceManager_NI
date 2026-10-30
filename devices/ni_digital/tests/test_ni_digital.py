@@ -3,7 +3,9 @@ Run: python -m unittest discover -s devices/ni_digital/tests"""
 
 import json
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -135,6 +137,44 @@ class Shmoo(unittest.TestCase):
         self.assertFalse(call(p, "swd_check")["pass"])
         call(p, "sim_set_vdd", vdd=2.5)                          # now 2.0 V is a valid high
         self.assertTrue(call(p, "swd_check")["pass"])
+
+DLL = os.path.join(HERE, "..", "..", "..", "build", "devices", "tdc_measure", "tdc_measure.dll")
+
+
+@unittest.skipUnless(os.path.exists(DLL), "tdc_measure is not built")
+class PatternProjectEditor(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        task = os.path.abspath(os.path.join(HERE, "..", "..", "tdc_measure"))
+        self.p = NiDigital({"resource": "PXI1Slot15", "plugin_dir": self.tmp,
+                            "uses": {"tdc_measure": {"library": os.path.abspath(DLL), "dir": task}},
+                            "options": {"backend": "sim", "sim": {"seed": 1}}})
+
+    def tearDown(self):
+        self.p.close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_edit_and_burst_through_the_driver(self):
+        self.assertEqual(call(self.p, "pe.info")["current"], "main")
+        call(self.p, "pe.edit_vector", v=0, field="pin:I0", value="1")
+        self.assertTrue(call(self.p, "pe.vectors")["modified"])
+        call(self.p, "pe.pattern_save")
+        call(self.p, "pe.burst", single=False)                 # comes back to this driver
+        self.assertIn(call(self.p, "pe.status")["state"], ("running", "done"))
+        call(self.p, "pe.abort")
+        rc, text = self.p._dm_invoke_json("pe.edit_vector", json.dumps({"v": 0, "field": "pin:I0", "value": "?"}))
+        self.assertLess(rc, 0)
+        self.assertIn("无效", json.loads(text)["error"])
+
+    def test_large_results_are_fetched(self):
+        self.assertTrue(call(self.p, "pe.timeline")["channels"])
+
+    def test_without_the_library(self):
+        p = NiDigital({"resource": "SIM", "options": {"backend": "sim", "sim": {"seed": 1}}})
+        rc, text = p._dm_invoke_json("pe.info", "{}")
+        self.assertLess(rc, 0)
+        self.assertIn("tdc_measure", json.loads(text)["error"])
+        p.close()
 
 
 if __name__ == "__main__":

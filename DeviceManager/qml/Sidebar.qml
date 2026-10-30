@@ -113,7 +113,10 @@ Rectangle {
                 SectionLabel { text: "插件" }
                 Repeater {
                     id: taskRepeater
+                    property int taskCount: 0
                     model: App.plugins
+                    onItemAdded: (index, item) => { if (item.category === "task") ++taskCount }
+                    onItemRemoved: (index, item) => { if (item.category === "task") --taskCount }
                     delegate: SidebarItem {
                         required property string pluginId
                         required property string name
@@ -132,12 +135,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    visible: !hasTasks()
-                    function hasTasks() {
-                        for (let i = 0; i < taskRepeater.count; ++i)
-                            if (taskRepeater.itemAt(i) && taskRepeater.itemAt(i).visible) return true
-                        return false
-                    }
+                    visible: taskRepeater.taskCount === 0
                     text: "暂无测试任务插件"
                     color: Theme.textFaint
                     font.family: Theme.sans

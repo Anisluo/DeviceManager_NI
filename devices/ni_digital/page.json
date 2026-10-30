@@ -21,6 +21,87 @@
     "what": "both"
    },
    "interval_ms": 300
+  },
+  {
+   "id": "pe_st",
+   "method": "pe.status",
+   "interval_ms": 1000
+  },
+  {
+   "id": "pe_sum",
+   "method": "pe.summary",
+   "interval_ms": 1000
+  },
+  {
+   "id": "pe_tl",
+   "method": "pe.timeline",
+   "interval_ms": 2000
+  },
+  {
+   "id": "pe_info",
+   "method": "pe.info",
+   "interval_ms": 5000
+  },
+  {
+   "id": "pe_cnt",
+   "method": "pe.counts",
+   "interval_ms": 1000
+  },
+  {
+   "id": "pe_vec",
+   "method": "pe.vectors",
+   "interval_ms": 2000
+  },
+  {
+   "id": "pe_specs",
+   "method": "pe.specs",
+   "interval_ms": 2000
+  },
+  {
+   "id": "pe_lv",
+   "method": "pe.levels",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pe_ts",
+   "method": "pe.timesets",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pe_pins",
+   "method": "pe.pins",
+   "interval_ms": 3000
+  },
+  {
+   "id": "pe_edges",
+   "method": "pe.timeset_edges",
+   "interval_ms": 1000,
+   "args": {
+    "timeset": "$form.pe_view_ts"
+   }
+  },
+  {
+   "id": "pe_pedges",
+   "method": "pe.timeset_edges",
+   "args": {
+    "pattern": true
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "pe_chk",
+   "method": "pe.checks",
+   "interval_ms": 2000
+  },
+  {
+   "id": "pe_inst",
+   "method": "pe.instruments",
+   "interval_ms": 5000
+  },
+  {
+   "id": "pe_spec_rows",
+   "method": "pe.spec_rows",
+   "interval_ms": 2000
   }
  ],
  "tabs": [
@@ -1117,6 +1198,1265 @@
        "x_unit": "Hz",
        "y_unit": "V",
        "height": 420
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "工程",
+   "sections": [
+    {
+     "title": "工程",
+     "subtitle": "新建的工程保存在驱动的 _work/projects 里；也可以打开任意已有工程的完整路径",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pe_project",
+       "label": "工程",
+       "options_from": {
+        "method": "pe.project_list",
+        "field": "projects"
+       },
+       "init": {
+        "method": "pe.info",
+        "field": "project"
+       },
+       "action": {
+        "method": "pe.project_open",
+        "args": {
+         "path": "$value"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "文件夹",
+       "source": "pe_info",
+       "field": "project",
+       "digits": 5
+      },
+      {
+       "type": "text",
+       "id": "pe_new_project",
+       "label": "新工程",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "新建工程",
+       "style": "secondary",
+       "action": {
+        "method": "pe.project_new",
+        "args": {
+         "name": "$form.pe_new_project"
+        }
+       },
+       "reload_page": true,
+       "refresh": [
+        "pe_spec_rows",
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges",
+        "pe_edges",
+        "pe_ts",
+        "pe_lv",
+        "pe_pins",
+        "pe_inst",
+        "pe_info",
+        "pe_specs"
+       ]
+      },
+      {
+       "type": "text",
+       "id": "pe_open_path",
+       "label": "打开",
+       "value": "",
+       "placeholder": "工程文件夹的完整路径",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "打开工程",
+       "style": "secondary",
+       "action": {
+        "method": "pe.project_open",
+        "args": {
+         "path": "$form.pe_open_path"
+        }
+       },
+       "reload_page": true,
+       "refresh": [
+        "pe_spec_rows",
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges",
+        "pe_edges",
+        "pe_ts",
+        "pe_lv",
+        "pe_pins",
+        "pe_inst",
+        "pe_info",
+        "pe_specs"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "图形",
+     "subtitle": "新图形只有一个 halt 向量，用到所有已接通道的引脚；到“向量”标签编辑",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pe_pattern",
+       "label": "图形",
+       "options_from": {
+        "method": "pe.list_patterns",
+        "field": "patterns"
+       },
+       "init": {
+        "method": "pe.info",
+        "field": "current"
+       },
+       "action": {
+        "method": "pe.select",
+        "args": {
+         "name": "$value"
+        }
+       }
+      },
+      {
+       "type": "text",
+       "id": "pe_new_pattern",
+       "label": "新图形",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "新建图形",
+       "style": "secondary",
+       "action": {
+        "method": "pe.pattern_new",
+        "args": {
+         "name": "$form.pe_new_pattern"
+        }
+       },
+       "reload_page": true,
+       "refresh": [
+        "pe_spec_rows",
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges",
+        "pe_edges",
+        "pe_ts",
+        "pe_lv",
+        "pe_pins",
+        "pe_inst",
+        "pe_info",
+        "pe_specs"
+       ]
+      },
+      {
+       "type": "button",
+       "label": "运行",
+       "style": "primary",
+       "action": {
+        "method": "pe.burst",
+        "args": {
+         "single": false
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "单次试跑",
+       "style": "secondary",
+       "action": {
+        "method": "pe.burst",
+        "args": {
+         "single": true
+        }
+       }
+      },
+      {
+       "type": "button",
+       "label": "中止",
+       "style": "ghost",
+       "action": {
+        "method": "pe.abort",
+        "args": {}
+       }
+      }
+     ]
+    },
+    {
+     "title": "导出为插件",
+     "subtitle": "生成 devices/<id>：运行器 DLL、页面和工程副本；点右上角“重新扫描插件”后出现在“插件”里",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "text",
+       "id": "pe_export_id",
+       "label": "插件 id",
+       "value": "",
+       "placeholder": "字母、数字、下划线",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "pe_export_name",
+       "label": "显示名称",
+       "value": "",
+       "placeholder": "留空用 id",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导出插件",
+       "style": "primary",
+       "action": {
+        "method": "pe.export_plugin",
+        "args": {
+         "id": "$form.pe_export_id",
+         "name": "$form.pe_export_name"
+        }
+       },
+       "publish": "pe_export"
+      },
+      {
+       "type": "readout",
+       "label": "导出到",
+       "source": "pe_export",
+       "field": "text",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "运行状态",
+     "span": 12,
+     "layout": "row",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "pe_st",
+       "field": "state_text",
+       "digits": 5,
+       "states": {
+        "运行中": {
+         "text": "运行中",
+         "tone": "accent"
+        },
+        "完成": {
+         "text": "完成",
+         "tone": "ok"
+        },
+        "空闲": {
+         "text": "空闲",
+         "tone": "muted"
+        },
+        "已中止": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "错误": {
+         "text": "错误",
+         "tone": "error"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "结果",
+       "source": "pe_st",
+       "field": "result",
+       "digits": 5,
+       "states": {
+        "PASS": {
+         "text": "PASS",
+         "tone": "ok"
+        },
+        "FAIL": {
+         "text": "FAIL",
+         "tone": "error"
+        },
+        "ABORT": {
+         "text": "已中止",
+         "tone": "warning"
+        },
+        "ERROR": {
+         "text": "错误",
+         "tone": "error"
+        },
+        "—": {
+         "text": "—",
+         "tone": "muted"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "进度",
+       "source": "pe_st",
+       "field": "progress",
+       "digits": 3,
+       "unit": "%"
+      },
+      {
+       "type": "readout",
+       "label": "已用 / 预计",
+       "source": "pe_st",
+       "field": "time_text",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "已完成循环",
+       "source": "pe_st",
+       "field": "loops_done",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "失败计数",
+       "source": "pe_st",
+       "field": "fail_text",
+       "digits": 5
+      }
+     ]
+    },
+    {
+     "title": "第一次测量的时序图",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "scope",
+       "source": "pe_tl",
+       "unit_index": 0,
+       "height": 260
+      }
+     ]
+    },
+    {
+     "title": "检查",
+     "subtitle": "引脚映射、电平、时序集是否覆盖图形的每个引脚，边沿是否在周期内",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "工程检查",
+       "source": "pe_chk",
+       "field": "text",
+       "digits": 5
+      },
+      {
+       "type": "table",
+       "source": "pe_chk",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "item",
+         "label": "问题"
+        }
+       ]
+      },
+      {
+       "type": "readout",
+       "label": "全部提示",
+       "source": "pe_sum",
+       "field": "notes_text",
+       "digits": 5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "引脚映射",
+   "sections": [
+    {
+     "title": "引脚映射",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_pins",
+       "rows_field": "rows",
+       "key": [
+        "pin"
+       ],
+       "write": "pe.set_pin",
+       "also": [
+        "pe_chk"
+       ],
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚",
+         "width": 90
+        },
+        {
+         "field": "instrument",
+         "label": "仪器",
+         "width": 140,
+         "editor": "combo",
+         "options_field": "instruments"
+        },
+        {
+         "field": "channel",
+         "label": "通道",
+         "width": 70,
+         "editor": "text"
+        },
+        {
+         "field": "groups",
+         "label": "分组",
+         "editor": "text"
+        },
+        {
+         "field": "patterns",
+         "label": "图形数",
+         "width": 64
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除行",
+         "method": "pe.remove_pin"
+        }
+       ],
+       "height": 420
+      },
+      {
+       "type": "text",
+       "id": "pe_new_pin",
+       "label": "新引脚",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "添加引脚",
+       "style": "secondary",
+       "action": {
+        "method": "pe.add_pin",
+        "args": {
+         "name": "$form.pe_new_pin"
+        }
+       },
+       "refresh": [
+        "pe_pins",
+        "pe_chk"
+       ]
+      }
+     ],
+     "subtitle": "通道和分组回车写入 .pinmap；分组用逗号分隔，写新名字就新建分组"
+    },
+    {
+     "title": "仪器",
+     "subtitle": "名称要和真机的资源名一致（如 PXI1Slot15）",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_inst",
+       "rows_field": "rows",
+       "key": [
+        "instrument"
+       ],
+       "write": "pe.rename_instrument",
+       "also": [
+        "pe_pins"
+       ],
+       "columns": [
+        {
+         "field": "name",
+         "label": "名称",
+         "editor": "text",
+         "mono": true
+        },
+        {
+         "field": "channels",
+         "label": "通道数",
+         "width": 80
+        },
+        {
+         "field": "pins",
+         "label": "已接引脚",
+         "width": 80
+        }
+       ],
+       "height": 420,
+       "row_actions": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "规格",
+   "sections": [
+    {
+     "title": "规格（Specifications）",
+     "subtitle": "分组.符号，定义可写数值、单位或公式；电平和时序里用 DC.VDD 这样的名字引用",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_spec_rows",
+       "rows_field": "rows",
+       "key": [
+        "key"
+       ],
+       "write": "pe.set_spec_text",
+       "height": 520,
+       "also": [
+        "pe_lv",
+        "pe_edges",
+        "pe_ts",
+        "pe_sum",
+        "pe_tl",
+        "pe_chk"
+       ],
+       "columns": [
+        {
+         "field": "section",
+         "label": "分组",
+         "width": 120
+        },
+        {
+         "field": "symbol",
+         "label": "符号",
+         "width": 160,
+         "mono": true
+        },
+        {
+         "field": "definition",
+         "label": "定义",
+         "width": 240,
+         "editor": "text"
+        },
+        {
+         "field": "value",
+         "label": "求值",
+         "width": 140
+        },
+        {
+         "field": "comment",
+         "label": "注释",
+         "editor": "text"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除行",
+         "method": "pe.remove_spec"
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "id": "pe_new_spec",
+       "label": "新规格",
+       "value": "",
+       "placeholder": "分组.符号，如 DC.VCC",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "pe_new_spec_def",
+       "label": "定义",
+       "value": "",
+       "placeholder": "如 3.3 V",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "添加规格",
+       "style": "secondary",
+       "action": {
+        "method": "pe.add_spec",
+        "args": {
+         "key": "$form.pe_new_spec",
+         "definition": "$form.pe_new_spec_def"
+        }
+       },
+       "refresh": [
+        "pe_spec_rows"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "电平",
+   "sections": [
+    {
+     "title": "引脚电平",
+     "subtitle": "可写数值或规格公式（如 0.6*DC.VDD），回车写入电平表，下次运行时重新加载",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_lv",
+       "rows_field": "rows",
+       "key": [
+        "pin"
+       ],
+       "write": "pe.set_level",
+       "also": [
+        "pe_chk"
+       ],
+       "columns": [
+        {
+         "field": "pin",
+         "label": "引脚",
+         "width": 90
+        },
+        {
+         "field": "Vil",
+         "label": "Vil",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Vih",
+         "label": "Vih",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Vol",
+         "label": "Vol",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Voh",
+         "label": "Voh",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Iol",
+         "label": "Iol",
+         "width": 90,
+         "editor": "text"
+        },
+        {
+         "field": "Ioh",
+         "label": "Ioh",
+         "width": 90,
+         "editor": "text"
+        },
+        {
+         "field": "Vterm",
+         "label": "Vterm",
+         "width": 90,
+         "editor": "text"
+        },
+        {
+         "field": "mode",
+         "name": "TerminationMode",
+         "label": "端接",
+         "width": 124,
+         "editor": "combo",
+         "options": [
+          "HighZ",
+          "ActiveLoad",
+          "Vterm"
+         ]
+        },
+        {
+         "field": "formulas",
+         "label": "公式求值"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除行",
+         "method": "pe.remove_level"
+        }
+       ],
+       "height": 420
+      },
+      {
+       "type": "combo",
+       "id": "pe_lv_pin",
+       "label": "引脚 / 组",
+       "options_from": {
+        "method": "pe.pin_options",
+        "args": {
+         "groups": true
+        },
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加电平",
+       "style": "secondary",
+       "action": {
+        "method": "pe.add_level",
+        "args": {
+         "pin": "$form.pe_lv_pin"
+        }
+       },
+       "refresh": [
+        "pe_lv",
+        "pe_chk"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "时序",
+   "sections": [
+    {
+     "title": "时序集",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_ts",
+       "rows_field": "rows",
+       "key": [
+        "name"
+       ],
+       "write": "pe.set_period",
+       "also": [
+        "pe_edges",
+        "pe_pedges",
+        "pe_sum",
+        "pe_tl",
+        "pe_vec",
+        "pe_chk"
+       ],
+       "columns": [
+        {
+         "field": "name",
+         "label": "名称",
+         "width": 130
+        },
+        {
+         "field": "period",
+         "label": "周期",
+         "width": 130,
+         "editor": "text"
+        },
+        {
+         "field": "used_by",
+         "label": "图形数",
+         "width": 64
+        },
+        {
+         "field": "patterns",
+         "label": "图形"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除行",
+         "method": "pe.remove_timeset"
+        }
+       ],
+       "height": 420
+      },
+      {
+       "type": "text",
+       "id": "pe_new_ts",
+       "label": "新时序集",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "pe_new_ts_from",
+       "label": "复制自",
+       "options_from": {
+        "method": "pe.timeset_options",
+        "args": {},
+        "field": "timesets"
+       }
+      },
+      {
+       "type": "button",
+       "label": "新建时序集",
+       "style": "secondary",
+       "action": {
+        "method": "pe.add_timeset",
+        "args": {
+         "name": "$form.pe_new_ts",
+         "copy_of": "$form.pe_new_ts_from"
+        }
+       },
+       "refresh": [
+        "pe_ts",
+        "pe_edges"
+       ]
+      }
+     ],
+     "subtitle": "周期可写数值或规格公式（如 Time.period*2），回车写入时序表"
+    },
+    {
+     "title": "时序集引脚边沿",
+     "subtitle": "每个引脚 / 引脚组的驱动格式和边沿，可写数值或规格公式；引脚自己的条目优先于引脚组；NR 没有 Return",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pe_view_ts",
+       "label": "显示",
+       "options_from": {
+        "method": "pe.timeset_options",
+        "args": {
+         "all": true
+        },
+        "field": "timesets"
+       }
+      },
+      {
+       "type": "edit_table",
+       "source": "pe_edges",
+       "rows_field": "rows",
+       "key": [
+        "timeset",
+        "pin"
+       ],
+       "write": "pe.set_edge",
+       "also": [
+        "pe_pedges",
+        "pe_sum",
+        "pe_tl",
+        "pe_chk"
+       ],
+       "columns": [
+        {
+         "field": "timeset",
+         "label": "时序集",
+         "width": 120
+        },
+        {
+         "field": "period",
+         "label": "周期",
+         "width": 80
+        },
+        {
+         "field": "pin",
+         "label": "引脚 / 组",
+         "width": 90
+        },
+        {
+         "field": "fmt",
+         "name": "format",
+         "label": "驱动格式",
+         "width": 96,
+         "editor": "combo",
+         "options": [
+          "NR",
+          "RL",
+          "RH",
+          "SBC"
+         ]
+        },
+        {
+         "field": "On",
+         "label": "On",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Data",
+         "label": "Data",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Return",
+         "label": "Return",
+         "width": 110,
+         "editor": "text",
+         "readonly_if": "no_return"
+        },
+        {
+         "field": "Off",
+         "label": "Off",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "Strobe",
+         "label": "Strobe",
+         "width": 110,
+         "editor": "text"
+        },
+        {
+         "field": "note",
+         "label": "备注"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除行",
+         "method": "pe.remove_edge"
+        }
+       ],
+       "height": 420
+      },
+      {
+       "type": "combo",
+       "id": "pe_edge_ts",
+       "label": "时序集",
+       "options_from": {
+        "method": "pe.timeset_options",
+        "args": {},
+        "field": "timesets"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "pe_edge_pin",
+       "label": "引脚 / 组",
+       "options_from": {
+        "method": "pe.pin_options",
+        "args": {
+         "groups": true
+        },
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加引脚条目",
+       "style": "secondary",
+       "action": {
+        "method": "pe.add_edge",
+        "args": {
+         "timeset": "$form.pe_edge_ts",
+         "pin": "$form.pe_edge_pin"
+        }
+       },
+       "refresh": [
+        "pe_edges",
+        "pe_pedges",
+        "pe_chk"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "图形编辑",
+   "sections": [
+    {
+     "title": "图形",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pe_vec_pat",
+       "label": "图形",
+       "options_from": {
+        "method": "pe.list_patterns",
+        "field": "patterns"
+       },
+       "init": {
+        "method": "pe.info",
+        "field": "current"
+       },
+       "action": {
+        "method": "pe.select",
+        "args": {
+         "name": "$value"
+        }
+       }
+      },
+      {
+       "type": "readout",
+       "label": "向量数",
+       "source": "pe_vec",
+       "field": "vector_count",
+       "digits": 5
+      },
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "pe_sum",
+       "field": "modified",
+       "states": {
+        "true": {
+         "text": "已修改，未保存",
+         "tone": "warning"
+        },
+        "false": {
+         "text": "与文件一致",
+         "tone": "ok"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "保存",
+     "subtitle": "修改先留在内存里，运行时用修改后的图形；保存才写入 .digipat",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "保存到当前图形",
+       "style": "primary",
+       "action": {
+        "method": "pe.pattern_save",
+        "args": {}
+       },
+       "refresh": [
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges"
+       ]
+      },
+      {
+       "type": "text",
+       "id": "pe_vec_save_name",
+       "label": "另存为",
+       "value": "",
+       "placeholder": "留空自动命名",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "保存为新图形",
+       "style": "secondary",
+       "action": {
+        "method": "pe.save_as",
+        "args": {
+         "name": "$form.pe_vec_save_name"
+        }
+       },
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "撤销修改",
+       "style": "ghost",
+       "action": {
+        "method": "pe.revert",
+        "args": {}
+       },
+       "refresh": [
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "引脚列",
+     "subtitle": "新增的列全为 X；时序集和电平要包含这个引脚",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pe_vec_pin",
+       "label": "引脚",
+       "options_from": {
+        "method": "pe.pin_options",
+        "args": {},
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加到图形",
+       "style": "secondary",
+       "action": {
+        "method": "pe.pattern_add_pin",
+        "args": {
+         "pin": "$form.pe_vec_pin"
+        }
+       },
+       "refresh": [
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges"
+       ]
+      },
+      {
+       "type": "button",
+       "label": "从图形移除",
+       "style": "ghost",
+       "action": {
+        "method": "pe.pattern_remove_pin",
+        "args": {
+         "pin": "$form.pe_vec_pin"
+        }
+       },
+       "refresh": [
+        "pe_vec",
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "向量表",
+     "subtitle": "和 Excel 一样：单击选中，拖动或 Shift 选区，直接打字改值，选区里打引脚状态一次填满，Ctrl+C / Ctrl+V 可与 Excel 互贴，Delete 清空，Ctrl+Z 撤销；右键拖动框选后可批量修改，右键菜单里还能插入、删除行",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "pe_vec",
+       "rows_field": "rows",
+       "rev_field": "rev",
+       "key": [
+        "v"
+       ],
+       "write": "pe.edit_vector",
+       "also": [
+        "pe_sum",
+        "pe_tl",
+        "pe_cnt",
+        "pe_chk",
+        "pe_pedges"
+       ],
+       "pin_columns": {
+        "field": "pin_list",
+        "states": "states",
+        "after": 4
+       },
+       "columns": [
+        {
+         "field": "v",
+         "label": "#",
+         "width": 48,
+         "row_header": true
+        },
+        {
+         "field": "label",
+         "label": "标签",
+         "width": 150,
+         "editor": "text",
+         "mono": true
+        },
+        {
+         "field": "timeset",
+         "label": "时序集",
+         "width": 130,
+         "editor": "combo",
+         "options_field": "ts_options"
+        },
+        {
+         "field": "instruction",
+         "label": "指令",
+         "width": 250,
+         "editor": "text",
+         "mono": true
+        },
+        {
+         "field": "comment",
+         "label": "注释",
+         "editor": "text"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "插入行",
+         "method": "pe.vector_insert",
+         "range": true,
+         "at": "bottom"
+        },
+        {
+         "label": "删除行",
+         "method": "pe.vector_delete",
+         "range": true,
+         "at": "top"
+        }
+       ],
+       "write_many": "pe.edit_vectors",
+       "undo": "pe.vector_undo",
+       "height": 720
+      }
+     ]
+    },
+    {
+     "title": "本图形用到的时序边沿",
+     "subtitle": "RL：状态 1 在 Data 拉高、Return 回低，repeat 里每个周期一个脉冲；RH 相反；NR 在 Data 处变电平",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pe_pedges",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "timeset",
+         "label": "时序集"
+        },
+        {
+         "field": "period",
+         "label": "周期"
+        },
+        {
+         "field": "pin",
+         "label": "引脚 / 组"
+        },
+        {
+         "field": "format",
+         "label": "驱动格式"
+        },
+        {
+         "field": "data",
+         "label": "Data"
+        },
+        {
+         "field": "return",
+         "label": "Return"
+        },
+        {
+         "field": "strobe",
+         "label": "Strobe"
+        },
+        {
+         "field": "note",
+         "label": "备注"
+        }
+       ]
       }
      ]
     }

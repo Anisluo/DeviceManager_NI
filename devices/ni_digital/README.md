@@ -16,6 +16,7 @@ swd.py             ARM ADIv5 SWD 主机协议（DP/AP、内存、Cortex-M 内核
 driver_backend.py  nidigital 后端；生成 pinmap 和 SWD source/capture 图形
 sim_backend.py     仿真 6571：电平、静态 I/O、PPMU、burst、图形 SWD 的时序窗口
 sim_dut.py         虚拟芯片：引脚电气模型、SWD 位级状态机、存储器映射、trim 寄存器
+pattern_core.py    加载 tdc_measure 的 DLL，转发图形工程编辑器的 pe.* 方法
 tests/             python -m unittest discover -s devices/ni_digital/tests
 ```
 
@@ -75,6 +76,21 @@ tests/             python -m unittest discover -s devices/ni_digital/tests
 
 ## 页面
 
-标签页：概览（仪器、引脚状态、电平、静态驱动）· PPMU（FV/FI、读数和趋势）· 开短路/漏电 · SWD（连接、存储器、内核）· 图形（工程、图形、burst、失败计数）· Shmoo（VIH × SWCLK）。
+标签页：概览（仪器、引脚状态、电平、静态驱动）· PPMU（FV/FI、读数和趋势）· 开短路/漏电 · SWD（连接、存储器、内核）· 图形（工程、图形、burst、失败计数）· Shmoo（VIH × SWCLK）· 工程 · 引脚映射 · 规格 · 电平 · 时序 · 图形编辑。
+
+## 图形工程编辑器
+
+“工程”之后的标签按 Digital Pattern Editor 的文档组织：引脚映射、规格、电平、时序、图形。都是电子表格，操作和 Excel 一样：
+拖动或 Shift 选区，打字改值，Ctrl+C / Ctrl+V 可与 Excel 互贴，右键拖动框选后批量修改，图形可 Ctrl+Z 撤销。可以新建或打开工程，
+单次试跑，然后**导出为插件**。
+
+- 工程模型只有一份 C++ 代码，在 `tdc_measure` 里。`plugin.json` 的 `"uses": ["tdc_measure"]` 让主机把它的路径传进来，
+  `pattern_core.py` 用 ctypes 加载 DLL（的副本），`pe.<方法>` 转发给它；要运行图形时 DLL 再回调本驱动的 `pattern_*` 方法。
+  第一次用到时才加载，没有这个 DLL 时驱动其余功能不受影响。
+- 工程默认在 `_work/projects/` 下，第一次打开时自动建 `MyProject`（8 个引脚、一个时序集、一个 `main` 图形）。新工程没有
+  `.digiproj`，Digital Pattern Editor 可以打开其中的单个表，但不能当工程打开。
+- 导出生成 `devices/<id>/`：运行器 DLL 的副本（改名为 `<id>.dll`）、`plugin.json`、`page.json`、`README.md` 和工程副本，
+  不需要编译器。点“重新扫描插件”后出现在侧栏“插件”里，自动用检测到的 6571 运行。再次导出同一个 id 会替换它。
+- 这些标签由 `tools/sync_editor_page.py` 从 `tdc_measure/page.json` 生成（规格表写在脚本里），改那边的页面后重新运行一次。
 
 相关序列：`sequences/m0_bringup.py`（开短路 → 漏电 → SWD → SRAM march → 基准 trim 闭环，生成逐项测试记录）、`sequences/swd_vdd_shmoo.py`。

@@ -4,7 +4,11 @@ dm_add_plugin(tdc_measure SOURCES
     src/sheets.cpp
     src/tdcgen.cpp
     src/tdms.cpp
-    src/util.cpp)
+    src/util.cpp
+    src/workspace.cpp)
+if(NOT WIN32)
+    target_link_libraries(tdc_measure PRIVATE ${CMAKE_DL_LIBS})
+endif()
 
 # the Digital Pattern Editor project ships with the task
 install(DIRECTORY project/ DESTINATION devices/tdc_measure/project)

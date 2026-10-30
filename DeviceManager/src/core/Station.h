@@ -32,7 +32,7 @@ class Station : public QAbstractListModel {
     Q_PROPERTY(QString dataDir READ dataDir NOTIFY loaded)
     Q_PROPERTY(QString discoverMode READ discoverMode NOTIFY loaded)
     Q_PROPERTY(QString discoverNote READ discoverNote NOTIFY loaded)
-    Q_PROPERTY(int count READ count NOTIFY loaded)
+    Q_PROPERTY(int count READ count NOTIFY devicesChanged)
     Q_PROPERTY(int instrumentCount READ instrumentCount NOTIFY loaded)
 public:
     enum Roles { DeviceRole = Qt::UserRole + 1, NameRole, PluginRole, ResourceRole, StatusRole, KindRole, ModelRole };
@@ -51,6 +51,7 @@ public:
     // Builds the device list (manual + detected + tasks) and opens every device.
     // Call after the registry has scanned.
     void openAll();
+    void addNewTasks();          // task plugins found by a rescan since openAll()
     void closeAll();
     void reopenPlugin(const QString& pluginId);
 
@@ -75,6 +76,7 @@ public:
 
 signals:
     void loaded();
+    void devicesChanged();
     void deviceLog(const QString& level, const QString& source, const QString& message);
 
 private:

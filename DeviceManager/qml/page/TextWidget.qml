@@ -40,6 +40,7 @@ RowLayout {
         placeholderText: w.spec.placeholder || ""
         font.family: w.spec.mono ? Theme.mono : Theme.sans
         onAccepted: w.commit()
-        onEditingFinished: if (!w.spec.action) w.commit()
+        // kept current while typing: clicking a button does not take the focus from the field
+        onTextChanged: if (!w.spec.action && w.spec.id) w.ctx.form[w.spec.id] = text
     }
 }

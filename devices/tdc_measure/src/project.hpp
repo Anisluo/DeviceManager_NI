@@ -124,6 +124,16 @@ public:
 
     std::string path, file, name;            // name = burst start label
 private:
+    struct Snapshot {
+        std::string name;
+        std::vector<std::string> pins, timesets, comments, label_names, states;
+        std::vector<int> label_locs, export_locs;
+        std::vector<uint32_t> base_ins;
+        std::map<size_t, int> edits;
+        std::vector<double> group_index;
+        bool structural = false;
+    };
+    std::vector<Snapshot> history_;
     void load();                             // decode `data`
     void begin_edit();                       // folds the count edits into the vector table
     size_t pin_index(const std::string& pin) const;
@@ -156,8 +166,12 @@ public:
     void remove_vector(size_t v);
     void add_pin(const std::string& pin);                    // new column of X
     void remove_pin(const std::string& pin);
+    // Replace the content with one halt vector of X on `pins`, starting at `label`.
+    void clear(const std::string& label, const std::vector<std::string>& pins, const std::string& timeset);
     void reset();                                            // discard every edit
     void commit(const std::string& bytes);                   // `bytes` are the file now
+    void checkpoint();                                       // remember the state for undo()
+    bool undo();                                             // back to the last checkpoint, false if none
 
     std::vector<uint32_t> ins() const;
     bool modified() const;

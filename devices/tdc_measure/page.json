@@ -1252,7 +1252,7 @@
     },
     {
      "title": "向量表",
-     "subtitle": "点引脚格后按 0 1 L H X M V D E 输入并跳到下一行，方向键移动；指令写 repeat(5)、set_loop(3)、end_loop(标签)、jump_if(0x28!, 标签)、halt；回车生效",
+     "subtitle": "和 Excel 一样：单击选中，拖动或 Shift 选区，直接打字改值，选区里打引脚状态一次填满，Ctrl+C / Ctrl+V 可与 Excel 互贴，Delete 清空，Ctrl+Z 撤销；右键拖动框选后可批量修改，右键菜单里还能插入、删除行",
      "span": 12,
      "widgets": [
       {
@@ -1264,7 +1264,6 @@
         "v"
        ],
        "write": "edit_vector",
-       "height": 620,
        "also": [
         "sum",
         "tl",
@@ -1275,13 +1274,14 @@
        "pin_columns": {
         "field": "pin_list",
         "states": "states",
-        "after": 2
+        "after": 4
        },
        "columns": [
         {
          "field": "v",
          "label": "#",
-         "width": 48
+         "width": 48,
+         "row_header": true
         },
         {
          "field": "label",
@@ -1291,23 +1291,18 @@
          "mono": true
         },
         {
-         "field": "instruction",
-         "label": "指令",
-         "width": 240,
-         "editor": "text",
-         "mono": true
-        },
-        {
          "field": "timeset",
          "label": "时序集",
-         "width": 140,
+         "width": 130,
          "editor": "combo",
          "options_field": "ts_options"
         },
         {
-         "field": "period",
-         "label": "周期",
-         "width": 80
+         "field": "instruction",
+         "label": "指令",
+         "width": 250,
+         "editor": "text",
+         "mono": true
         },
         {
          "field": "comment",
@@ -1317,14 +1312,21 @@
        ],
        "row_actions": [
         {
-         "label": "插入",
-         "method": "vector_insert"
+         "label": "插入行",
+         "method": "vector_insert",
+         "range": true,
+         "at": "bottom"
         },
         {
-         "label": "删除",
-         "method": "vector_delete"
+         "label": "删除行",
+         "method": "vector_delete",
+         "range": true,
+         "at": "top"
         }
-       ]
+       ],
+       "write_many": "edit_vectors",
+       "undo": "vector_undo",
+       "height": 720
       }
      ]
     },
@@ -1403,7 +1405,6 @@
         "name"
        ],
        "write": "set_period",
-       "height": 340,
        "also": [
         "edges",
         "pedges",
@@ -1436,10 +1437,11 @@
        ],
        "row_actions": [
         {
-         "label": "删除",
+         "label": "删除行",
          "method": "remove_timeset"
         }
-       ]
+       ],
+       "height": 420
       },
       {
        "type": "text",
@@ -1492,7 +1494,6 @@
         "pin"
        ],
        "write": "set_edge",
-       "height": 480,
        "also": [
         "pedges",
         "sum",
@@ -1566,10 +1567,11 @@
        ],
        "row_actions": [
         {
-         "label": "删除",
+         "label": "删除行",
          "method": "remove_edge"
         }
-       ]
+       ],
+       "height": 420
       },
       {
        "type": "combo",
@@ -1625,7 +1627,6 @@
         "pin"
        ],
        "write": "set_level",
-       "height": 360,
        "also": [
         "chk"
        ],
@@ -1696,10 +1697,11 @@
        ],
        "row_actions": [
         {
-         "label": "删除",
+         "label": "删除行",
          "method": "remove_level"
         }
-       ]
+       ],
+       "height": 420
       },
       {
        "type": "combo",
@@ -1747,7 +1749,6 @@
         "pin"
        ],
        "write": "set_pin",
-       "height": 560,
        "also": [
         "chk"
        ],
@@ -1783,10 +1784,11 @@
        ],
        "row_actions": [
         {
-         "label": "删除",
+         "label": "删除行",
          "method": "remove_pin"
         }
-       ]
+       ],
+       "height": 420
       },
       {
        "type": "text",
@@ -1827,7 +1829,6 @@
         "instrument"
        ],
        "write": "rename_instrument",
-       "height": 160,
        "also": [
         "pins"
        ],
@@ -1848,7 +1849,9 @@
          "label": "已接引脚",
          "width": 80
         }
-       ]
+       ],
+       "height": 420,
+       "row_actions": []
       }
      ]
     },

@@ -10,6 +10,14 @@
 #include <fstream>
 #include <sstream>
 
+#if defined(_WIN32)
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#  include <windows.h>
+#else
+#  include <dlfcn.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace tdc {
@@ -400,6 +408,54 @@ std::vector<std::string> find_files(const std::string& root, const std::string& 
     }
     std::sort(out.begin(), out.end());
     return out;
+}
+
+std::vector<std::string> sub_dirs(const std::string& root)
+{
+    std::vector<std::string> out;
+    std::error_code ec;
+    for (auto it = fs::directory_iterator(P(root), ec); !ec && it != fs::directory_iterator(); it.increment(ec))
+        if (it->is_directory(ec)) out.push_back(it->path().filename().u8string());
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+void copy_tree(const std::string& from, const std::string& to)
+{
+    std::error_code ec;
+    fs::copy(P(from), P(to), fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    if (ec) throw std::runtime_error("cannot copy " + from + ": " + ec.message());
+}
+
+void remove_tree(const std::string& path)
+{
+    std::error_code ec;
+    fs::remove_all(P(path), ec);
+    if (ec) throw std::runtime_error("cannot remove " + path + ": " + ec.message());
+}
+
+std::string library_path()
+{
+#if defined(_WIN32)
+    HMODULE self = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&library_path), &self);
+    std::wstring path(32768, L'\0');
+    path.resize(GetModuleFileNameW(self, path.data(), DWORD(path.size())));
+    return fs::path(path).u8string();
+#else
+    Dl_info info{};
+    return dladdr(reinterpret_cast<void*>(&library_path), &info) && info.dli_fname ? info.dli_fname : "";
+#endif
+}
+
+std::string library_suffix()
+{
+#if defined(_WIN32)
+    return ".dll";
+#else
+    return ".so";
+#endif
 }
 
 } // namespace tdc

@@ -130,7 +130,8 @@ int main(int argc, char** argv)
         std::ofstream(sheet, std::ios::binary) << x;
     }
     const Json cfg{{"plugin_dir", src.u8string()}, {"simulate", true}, {"instruments", kv("digital", "dig1")},
-                   {"options", Json{{"project", (tmp / "P").u8string()}, {"work_dir", (tmp / "w").u8string()}, {"pattern", "TDC_M20_2"}}}};
+                   {"options", Json{{"project", (tmp / "P").u8string()}, {"work_dir", (tmp / "w").u8string()}, {"pattern", "TDC_M20_2"},
+                                     {"export_root", (tmp / "plugins").u8string()}}}};
     handle = create(cfg.dump().c_str());
     CHECK(handle, "create");
     if (!handle) return 1;
@@ -495,16 +496,141 @@ int main(int argc, char** argv)
     call("rename_instrument", Json{{"instrument", "PXI1Slot15"}, {"value", "PXI1Slot3"}});
     CHECK(read(pinmap).find("PXI1Slot15") == std::string::npos && read(pinmap).find("instrument=\"PXI1Slot3\" channel=\"0\"") != std::string::npos, "instrument renamed");
 
+    std::printf("edit specifications\n");
+    const fs::path spec_sheet = tmp / "P" / "Specifications" / "Specifications.specs";
+    call("set_spec_text", Json{{"key", "DC.VDD"}, {"field", "definition"}, {"value", "2.5 V"}});
+    CHECK(read(spec_sheet).find("<f:Definition>2.5 V</f:Definition>") != std::string::npos, "definition written");
+    call("set_spec_text", Json{{"key", "Time.period"}, {"field", "comment"}, {"value", "基准周期"}});
+    CHECK(read(spec_sheet).find("<f:Comment>基准周期</f:Comment>") != std::string::npos, "comment added");
+    const Json spec_table = call("spec_rows");
+    Json spec_row;
+    for (auto& r : spec_table["rows"].items()) if (r.str("key") == "DC.VDD") spec_row = r;
+    CHECK(spec_row.str("definition") == "2.5 V" && spec_row.str("value") == "2.5", "spec row %s", spec_row.dump().c_str());
+    call("set_spec_text", Json{{"key", "DC.VDD"}, {"field", "definition"}, {"value", "nonsense"}}, &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "bad definition refused");
+    call("add_spec", Json{{"key", "Extra.limit"}, {"definition", "1 mA"}});
+    CHECK(read(spec_sheet).find("<Section name=\"Extra\">") != std::string::npos, "new section");
+    call("add_spec", Json{{"key", "Extra.limit"}}, &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "duplicate spec refused");
+    call("remove_spec", kv("key", "Extra.limit"));
+    CHECK(read(spec_sheet).find("Extra.limit") == std::string::npos && read(spec_sheet).find("symbol=\"limit\"") == std::string::npos, "spec removed");
+    const Json one_ts = call("timeset_edges", kv("timeset", "ten_us"));
+    bool only_one = one_ts["rows"].size() > 0;
+    for (auto& r : one_ts["rows"].items()) only_one = only_one && r.str("timeset") == "ten_us";
+    CHECK(only_one, "edges of one timeset");
+
     std::printf("restore\n");
     call("restore_sheets");
     CHECK(read(pinmap).find("PXI1Slot15") != std::string::npos && read(pinmap).find("PXI1Slot3") == std::string::npos, "pin map restored");
     CHECK(read(level_sheet).find("0.9*DC.VDD") == std::string::npos, "levels restored");
+    CHECK(read(spec_sheet).find("2.5 V") == std::string::npos, "specs restored");
     CHECK(read(timing).find("<Period>10 \xC2\xB5s</Period>") != std::string::npos, "timing restored");
+
+    std::printf("spreadsheet edits\n");
+    call("select", kv("name", "TDC_M20_2"));
+    Json cells = Json::array();
+    for (int r = 5; r <= 7; ++r) cells.push_back(cell(r, "pin:I3", "H"));
+    call("edit_vectors", kv("cells", cells));
+    ev = call("vectors");
+    CHECK(ev["rows"].items()[5].str("states")[3] == 'H' && ev["rows"].items()[7].str("states")[3] == 'H', "range filled");
+    call("vector_undo");
+    ev = call("vectors");
+    CHECK(ev["rows"].items()[5].str("states")[3] != 'H' && !ev["modified"].as_bool(), "one undo for the whole range");
+    cells = Json::array();
+    cells.push_back(cell(5, "pin:I3", "L"));
+    cells.push_back(cell(6, "pin:I3", "Q"));                   // refused
+    call("edit_vectors", kv("cells", cells), &rc);
+    CHECK(rc == DM_E_BAD_ARGS && call("vectors")["rows"].items()[5].str("states")[3] != 'L', "all or none");
+    const size_t rows_before = call("vectors")["rows"].size();
+    call("vector_insert", Json{{"v", 6}, {"count", 3}});
+    CHECK(call("vectors")["rows"].size() == rows_before + 3, "insert rows");
+    call("vector_delete", Json{{"v", 7}, {"count", 2}});
+    CHECK(call("vectors")["rows"].size() == rows_before + 1, "delete rows");
+    call("vector_undo");
+    call("vector_undo");
+    CHECK(call("vectors")["rows"].size() == rows_before && !call("vectors")["modified"].as_bool(), "undo rows");
+    call("pattern_add_pin", kv("pin", "I4"));
+    call("vector_undo");
+    CHECK(call("vectors").str("pins") == "I0 I1 I2 I3", "undo pin column");
+    call("vector_undo", Json::object(), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "nothing left to undo");
+    call("revert");
+
+    std::printf("new project\n");
+    call("project_new", kv("name", "Fresh"));
+    CHECK(call("info").str("current") == "main", "new project opens its pattern");
+    CHECK(call("project_list")["projects"].size() == 1, "project listed");
+    call("project_new", kv("name", "Fresh"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "existing project refused");
+    call("project_new", kv("name", "1 bad"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "bad project name refused");
+    ev = call("vectors");
+    CHECK(ev.str("pins") == "I0 I1 I2 I3 I4 I5 I6 I7" && ev["rows"].size() == 1, "new pattern %s", ev.str("pins").c_str());
+    CHECK(ev["rows"].items()[0].str("instruction") == "halt" && ev["rows"].items()[0].str("timeset") == "default", "one halt vector");
+    Json fresh_checks = call("checks");
+    CHECK(fresh_checks.integer("count", -1) == 0, "new project is clean: %s", fresh_checks.dump().c_str());
+    call("pattern_new", kv("name", "second"));
+    CHECK(call("info").str("current") == "second" && call("list_patterns")["patterns"].size() >= 2, "pattern added");
+    call("pattern_new", kv("name", "second"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "duplicate pattern refused");
+    call("edit_vector", cell(0, "pin:I0", "1"));
+
+    std::printf("export plugin\n");
+    call("export_plugin", Json{{"id", "my_task"}, {"name", "我的任务"}}, &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "unsaved edits block the export");
+    call("pattern_save");
+    Json ex = call("export_plugin", Json{{"id", "my_task"}, {"name", "我的任务"}});
+    const fs::path out = tmp / "plugins" / "my_task";
+    CHECK(fs::u8path(ex.str("folder")) == out, "export folder %s", ex.str("folder").c_str());
+    CHECK(fs::exists(out / "my_task.dll") && fs::exists(out / "project" / "Patterns" / "second.digipat"), "exported files");
+    const Json ex_manifest = Json::parse(read(out / "plugin.json"));
+    CHECK(ex_manifest.str("entry") == "my_task" && ex_manifest.str("category") == "task" && ex_manifest["requires"]["digital"]["models"].size() == 1, "manifest");
+    bool generator_tab = false;
+    const Json ex_page = Json::parse(read(out / "page.json"));
+    for (auto& tab : ex_page["tabs"].items()) generator_tab = generator_tab || tab.str("title") == "信号生成";
+    CHECK(!generator_tab && ex_page.str("title") == "我的任务", "exported page");
+    call("export_plugin", kv("id", "my_task"));                // an earlier export is replaced
+    fs::create_directories(tmp / "plugins" / "someone_elses");
+    call("export_plugin", kv("id", "someone_elses"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "other folders are left alone");
+    call("export_plugin", kv("id", "1 bad"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "bad id refused");
+    call("project_open", kv("path", "NoSuchProject"), &rc);
+    CHECK(rc == DM_E_BAD_ARGS, "missing project refused");
+    call("project_open", kv("path", (tmp / "P").u8string()));
+    CHECK(call("info").integer("patterns", 0) >= 24, "back in the first project");
+
+    std::printf("exported plugin runs\n");
+    const fs::path ex_dll = out / "my_task.dll";
+    void* ex_lib = open_lib(ex_dll.string().c_str());
+    CHECK(ex_lib, "exported DLL loads");
+    if (ex_lib) {
+        auto ex_create = (dm_create_fn)sym(ex_lib, "plugin_create");
+        auto ex_set_host = (dm_set_host_fn)sym(ex_lib, "plugin_set_host");
+        auto ex_destroy = (dm_destroy_fn)sym(ex_lib, "plugin_destroy");
+        const dm_invoke_fn saved_fn = invoke_fn;
+        void* const saved_handle = handle;
+        Json ex_cfg{{"plugin_dir", out.u8string()}, {"simulate", true}, {"instruments", kv("digital", "dig1")},
+                    {"options", ex_manifest["default_config"]["options"]}};
+        handle = ex_create(ex_cfg.dump().c_str());
+        invoke_fn = (dm_invoke_fn)sym(ex_lib, "plugin_invoke");
+        CHECK(handle, "exported plugin opens its project");
+        if (handle) {
+            ex_set_host(handle, &g_host);
+            CHECK(call("info").str("current") == "second", "exported plugin selects the pattern");
+            CHECK(call("vectors")["rows"].items()[0].str("states")[0] == '1', "exported plugin has the saved edit");
+            call("burst");
+            wait_ms(50);
+            CHECK(call("status").str("result") == "PASS", "exported plugin bursts");
+            ex_destroy(handle);
+        }
+        invoke_fn = saved_fn;
+        handle = saved_handle;
+    }
 
     destroy(handle);
 
-    std::printf("no instrument\n");
-    const Json cfg2{{"plugin_dir", src.u8string()}, {"instruments", kv("digital", nullptr)},
+    std::printf("no instrument\n");    const Json cfg2{{"plugin_dir", src.u8string()}, {"instruments", kv("digital", nullptr)},
                     {"options", Json{{"project", (tmp / "P").u8string()}, {"work_dir", (tmp / "w2").u8string()}}}};
     handle = create(cfg2.dump().c_str());
     set_host(handle, &g_host);

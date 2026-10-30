@@ -150,6 +150,7 @@ void AppController::rescanPlugins()
 {
     applyRoots();
     m_registry.rescan();
+    m_station.addNewTasks();
     m_log.append("info", "plugins", QStringLiteral("插件扫描完成：%1 个").arg(m_registry.count()));
 }
 

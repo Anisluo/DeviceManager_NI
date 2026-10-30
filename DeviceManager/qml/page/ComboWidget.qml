@@ -25,17 +25,20 @@ RowLayout {
         store(i)
         if (spec.action) ctx.act(spec.action, options[i].value)
     }
-    function reinit() {
+    function readInit() {
         ctx.read(spec.init, v => { const i = indexOfValue(v); if (i >= 0) box.currentIndex = i })
     }
+    function reinit() {
+        if (!spec.options_from) { readInit(); return }
+        ctx.read(spec.options_from, list => {
+            if (!Array.isArray(list)) return
+            rawOptions = list
+            box.currentIndex = Math.max(0, indexOfValue(spec.value))
+            store(box.currentIndex)
+            readInit()                                 // after the list: the value must be in it
+        })
+    }
     Component.onCompleted: {
-        if (spec.options_from)
-            ctx.read(spec.options_from, list => {
-                if (!Array.isArray(list)) return
-                rawOptions = list
-                box.currentIndex = Math.max(0, indexOfValue(spec.value))
-                store(box.currentIndex)
-            })
         if (spec.value !== undefined) box.currentIndex = Math.max(0, indexOfValue(spec.value))
         store(box.currentIndex)
         reinit()

@@ -29,6 +29,13 @@ void levels_set(std::string& x, const std::string& pin, const std::string& field
 void levels_add(std::string& x, const std::string& pin, const std::string& copy_of);
 void levels_remove(std::string& x, const std::string& pin);
 
+// ---- .specs ----
+// field: Definition, Comment
+void specs_set(std::string& x, const std::string& section, const std::string& symbol, const std::string& field,
+               const std::string& text);
+void specs_add(std::string& x, const std::string& section, const std::string& symbol, const std::string& definition);
+void specs_remove(std::string& x, const std::string& section, const std::string& symbol);
+
 // ---- .pinmap ----
 void pinmap_add_pin(std::string& x, const std::string& pin);
 void pinmap_remove_pin(std::string& x, const std::string& pin);          // with its group members and connections

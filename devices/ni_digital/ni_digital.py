@@ -9,14 +9,16 @@ result formatting — is shared, so the simulator exercises the same code paths
 that run on the bench.
 """
 
+import os
 import time
 
-from dm.plugin import Plugin, PluginError, method, E_HW, E_STATE
+from dm.plugin import Plugin, PluginError, method, to_json, E_FAIL, E_HW, E_STATE
 
 # Helper modules must be imported here, at load time: the host puts the plugin folder on
 # sys.path only while it loads this file. (driver_backend imports nidigital lazily.)
 import swd as swdlib
 from driver_backend import DriverBackend
+from pattern_core import PatternCore
 from sim_backend import PPMU_RANGES, SimBackend
 
 DEFAULT_PINS = {"SWCLK": 0, "SWDIO": 1, "nRST": 2, "PA0": 4, "PA1": 5, "PA2": 6, "PA3": 7,
@@ -83,6 +85,7 @@ class PatternPhy:
 class NiDigital(Plugin):
     def __init__(self, config):
         super().__init__(config)
+        self.pattern_core = None
         o = self.options
         # The host passes options through a JSON object that may reorder keys: list pins by channel.
         self.pin_map = dict(sorted(((k, int(v)) for k, v in (o.get("pins") or DEFAULT_PINS).items()), key=lambda kv: kv[1]))
@@ -110,6 +113,8 @@ class NiDigital(Plugin):
         self.log(f"{self.backend.info()['model']} · {len(self.pin_map)} 个引脚 · 后端 {self.backend.name}")
 
     def close(self):
+        if self.pattern_core is not None:
+            self.pattern_core.close()
         self.backend.close()
 
     # ------------------------------------------------------------------ helpers
@@ -503,6 +508,38 @@ class NiDigital(Plugin):
     @method("Loaded pattern names")
     def list_patterns(self):
         return {"patterns": sorted(getattr(self.backend, "patterns", {}) or [])}
+
+    # ------------------------------------------------------------------ project editor
+    # "pe.<method>" belongs to the pattern project core; see pattern_core.py.
+    def _core(self):
+        if self.pattern_core is None:
+            used = (self.config.get("uses") or {}).get("tdc_measure") or {}
+            if not used.get("library"):
+                raise PluginError("没有找到 tdc_measure 插件的运行库，图形工程不可用", E_STATE)
+            work = os.path.join(self.config.get("plugin_dir") or os.path.dirname(os.path.abspath(__file__)), "_work")
+            projects = self.options.get("projects_dir") or os.path.join(work, "projects")
+            self.pattern_core = PatternCore(used["library"], {
+                "plugin_dir": used["dir"], "resource": self.resource, "simulate": self.simulate,
+                "instruments": {"digital": "self"},
+                "options": {"project": os.path.join(projects, "MyProject"), "create_project": True,
+                            "projects_dir": projects, "work_dir": os.path.join(work, "editor"),
+                            "instrument_name": self.resource, "pattern": "main"},
+            }, self._dm_invoke_json, self._core_event, os.path.join(work, "editor"))
+        return self.pattern_core
+
+    def _core_event(self, text):
+        if self._emit is not None:
+            self._emit(text)
+
+    def _dm_invoke_json(self, name, args_json):
+        if not name.startswith("pe."):
+            return super()._dm_invoke_json(name, args_json)
+        try:
+            return self._core().invoke(name[3:], args_json)
+        except PluginError as e:
+            return e.code, to_json({"error": str(e)})
+        except Exception as e:  # noqa: BLE001 — same contract as the base class
+            return E_FAIL, to_json({"error": f"{type(e).__name__}: {e}"})
 
     # ------------------------------------------------------------------ simulator controls
     def _sim(self):

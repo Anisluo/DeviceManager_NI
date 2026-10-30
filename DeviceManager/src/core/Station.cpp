@@ -12,6 +12,7 @@ Station::Station(PluginRegistry* registry, QObject* parent)
     : QAbstractListModel(parent), m_registry(registry)
 {
     Device::setResolver([this](const QString& name) { return device(name); });
+    connect(this, &Station::loaded, this, &Station::devicesChanged);
 }
 
 Station::~Station()
@@ -102,7 +103,7 @@ void Station::addTasks()
     for (int i = 0; i < m_registry->rowCount(); ++i) {
         const QString id = m_registry->data(m_registry->index(i), PluginRegistry::IdRole).toString();
         const PluginInfo* p = m_registry->find(id);
-        if (!p || p->category != QLatin1String("task") || !p->error.isEmpty()) continue;
+        if (!p || p->category != QLatin1String("task") || !p->error.isEmpty() || device(p->id)) continue;
         // "requires": {"digital": {"models": ["PXIe-6571"]}} -> "instruments": {"digital": "<device>"}
         QJsonObject instruments;
         const QJsonObject req = p->manifest.value("requires").toObject();
@@ -135,6 +136,12 @@ bool Station::openDevice(Device* d)
     }
     d->mergeDefaults(info->defaultConfig);
     d->mergeDefaults(QJsonObject{{"plugin_dir", info->dir}});
+    // "uses": ["other_plugin"] -> where that plugin lives, for drivers that load its library
+    QJsonObject uses;
+    for (const auto& u : info->manifest.value("uses").toArray())
+        if (const PluginInfo* other = m_registry->find(u.toString()))
+            uses.insert(other->id, QJsonObject{{"dir", other->dir}, {"library", other->libraryPath}});
+    if (!uses.isEmpty()) d->mergeDefaults(QJsonObject{{"uses", uses}});
     QString err;
     auto lib = m_registry->library(d->pluginId(), &err);
     if (!lib) {
@@ -184,6 +191,18 @@ void Station::openAll()
         if (d->kind() != QLatin1String("task")) openDevice(d);
     for (Device* d : std::as_const(m_devices))             // tasks after the instruments they use
         if (d->kind() == QLatin1String("task")) openDevice(d);
+}
+
+void Station::addNewTasks()
+{
+    if (m_path.isEmpty()) return;
+    const QList<Device*> before = m_devices;
+    beginResetModel();
+    addTasks();
+    endResetModel();
+    emit devicesChanged();
+    for (Device* d : std::as_const(m_devices))
+        if (!before.contains(d)) openDevice(d);
 }
 
 void Station::closeAll()

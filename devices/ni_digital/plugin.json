@@ -6,6 +6,9 @@
   "entry": "ni_digital:NiDigital",
   "abi": 1,
   "category": "instrument",
+  "uses": [
+    "tdc_measure"
+  ],
   "models": [
     "PXIe-6571"
   ],

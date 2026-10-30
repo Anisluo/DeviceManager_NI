@@ -465,12 +465,63 @@ void Pattern::remove_pin(const std::string& pin)
         if (k < c->nums.size()) c->nums.erase(c->nums.begin() + long(k));
 }
 
+void Pattern::clear(const std::string& label, const std::vector<std::string>& pin_list, const std::string& timeset)
+{
+    if (!valid_name(label)) throw std::invalid_argument("图形名 '" + label + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+    if (pin_list.empty()) throw std::invalid_argument("图形至少要有一个引脚");
+    begin_edit();
+    name = label;
+    pins = pin_list;
+    timesets = {timeset};
+    label_names = {label};
+    label_locs = {0};
+    export_locs.clear();
+    if (tdms::Channel* c = tdms.channel("Pattern", "ExportLabelName")) c->strs.clear();
+    if (tdms::Channel* c = tdms.channel("PinItem", "PinGroup")) c->strs.clear();
+    if (tdms::Channel* c = tdms.channel("PinItem", "PinGroupFormat")) c->nums.clear();
+    if (tdms::Channel* c = tdms.channel("PinItem", "PinNameGroupIndex")) c->nums.assign(pin_list.size(), -1);
+    base_ins = {(uint32_t(15) << 28) | 0xFu};
+    states = {std::string(pin_list.size(), 'X')};
+    comments = {std::string()};
+}
+
 void Pattern::reset()
 {
     edits.clear();
     structural = false;
+    history_.clear();
     load();
     ++revision;
+}
+
+void Pattern::checkpoint()
+{
+    constexpr size_t MAX_UNDO = 100;
+    if (history_.size() >= MAX_UNDO) history_.erase(history_.begin());
+    const tdms::Channel* group = tdms.channel("PinItem", "PinNameGroupIndex");
+    history_.push_back(Snapshot{name, pins, timesets, comments, label_names, states, label_locs, export_locs, base_ins, edits,
+                                group ? group->nums : std::vector<double>{}, structural});
+}
+
+bool Pattern::undo()
+{
+    if (history_.empty()) return false;
+    Snapshot s = std::move(history_.back());
+    history_.pop_back();
+    name = std::move(s.name);
+    pins = std::move(s.pins);
+    timesets = std::move(s.timesets);
+    comments = std::move(s.comments);
+    label_names = std::move(s.label_names);
+    states = std::move(s.states);
+    label_locs = std::move(s.label_locs);
+    export_locs = std::move(s.export_locs);
+    base_ins = std::move(s.base_ins);
+    edits = std::move(s.edits);
+    structural = s.structural;
+    if (tdms::Channel* group = tdms.channel("PinItem", "PinNameGroupIndex")) group->nums = std::move(s.group_index);
+    ++revision;
+    return true;
 }
 
 void Pattern::commit(const std::string& bytes)
@@ -1049,13 +1100,13 @@ Project::Project(const std::string& f, std::vector<std::string> extra) : folder(
     levels_path = first(".digilevels");
     timing_path = first(".digitiming");
     if (pinmap_path.empty()) throw std::runtime_error(folder + "：没有 .pinmap");
-    if (!specs_path.empty()) specs = load_specs(specs_path);
     reload_sheets();
 }
 
 void Project::reload_sheets()
 {
     pinmap = load_pinmap(pinmap_path);
+    if (!specs_path.empty()) specs = load_specs(specs_path);
     if (!levels_path.empty()) levels = load_levels(levels_path);
     rescan();
 }

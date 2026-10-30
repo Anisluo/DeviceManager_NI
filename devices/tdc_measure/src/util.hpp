@@ -53,5 +53,10 @@ std::string parent_dir(const std::string& path);
 void make_dirs(const std::string& path);
 // All files under `root` (recursive) whose name ends with `ext` (case-insensitive), sorted.
 std::vector<std::string> find_files(const std::string& root, const std::string& ext);
+std::vector<std::string> sub_dirs(const std::string& root);  // names, sorted
+void copy_tree(const std::string& from, const std::string& to);
+void remove_tree(const std::string& path);
+std::string library_path();                                  // the shared library holding this code
+std::string library_suffix();                                // ".dll" / ".so"
 
 } // namespace tdc

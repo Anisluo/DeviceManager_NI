@@ -9,6 +9,7 @@
 #include "sheets.hpp"
 #include "tdcgen.hpp"
 #include "util.hpp"
+#include "workspace.hpp"
 
 #include <dm/plugin.hpp>
 
@@ -26,7 +27,7 @@ using Clock = std::chrono::steady_clock;
 static const char* kManifest = R"({
   "id": "tdc_measure",
   "name": "TDC测量",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "cpp",
   "abi": 1,
   "category": "task",
@@ -66,24 +67,43 @@ public:
         const Json& o = cfg["options"];
         plugin_dir_ = cfg.str("plugin_dir", ".");
         std::string folder = o.str("project", "project/DemoPrj-TDC");
-        if (!(folder.size() > 1 && (folder[1] == ':' || folder[0] == '/' || folder[0] == '\\')))
-            folder = tdc::path_join(plugin_dir_, folder);
+        if (!is_absolute(folder)) folder = tdc::path_join(plugin_dir_, folder);
         work_ = o.str("work_dir", tdc::path_join(plugin_dir_, "_work"));
         gen_dir_ = tdc::path_join(work_, "gen");
         tdc::make_dirs(gen_dir_);
-        project_ = std::make_unique<tdc::Project>(folder, std::vector<std::string>{gen_dir_});
+        projects_dir_ = o.str("projects_dir", tdc::path_join(work_, "projects"));
+        instrument_name_ = o.str("instrument_name", cfg.str("resource", ""));
+        seed_pattern_ = tdc::path_join(plugin_dir_, "project/DemoPrj-TDC/Patterns/TDC_M20_2.digipat");
+        export_root_ = o.str("export_root", tdc::parent_dir(plugin_dir_));
         busy_delay_ = o.number("busy_delay_us", 120.0) * 1e-6;
         digital_ = cfg["instruments"]["digital"].as_string();
         simulate_ = cfg.boolean("simulate", true);
-        if (project_->patterns.empty()) throw std::runtime_error(folder + "：没有 .digipat 图形");
-        const std::string want = o.str("pattern", "TDC_M20_2");
-        current_ = project_->find(want) ? want : project_->patterns.front()->file;
-        gen_template_ = tdc::path_join(project_->folder, "Patterns/TDC_M20_2.digipat");
+        if (o.boolean("create_project", false) && tdc::find_files(folder, ".pinmap").empty())
+            tdc::new_project(folder, seed_pattern_, instrument_name_);
+        open_project(folder, o.str("pattern", "TDC_M20_2"));
         rng_.seed(std::random_device{}());
         register_methods();
     }
 
 private:
+    static bool is_absolute(const std::string& path)
+    {
+        return path.size() > 1 && (path[1] == ':' || path[0] == '/' || path[0] == '\\');
+    }
+
+    void open_project(const std::string& folder, const std::string& want)
+    {
+        auto next = std::make_unique<tdc::Project>(folder, std::vector<std::string>{gen_dir_});
+        if (next->patterns.empty()) throw std::runtime_error(folder + "：没有 .digipat 图形");
+        project_ = std::move(next);
+        current_ = project_->find(want) ? want : project_->patterns.front()->file;
+        gen_template_ = tdc::path_join(project_->folder, "Patterns/TDC_M20_2.digipat");
+        spec_values_.clear();
+        instrument_ready_ = false;
+        ++sheet_rev_;
+        run_ = Run{};
+    }
+
     // ------------------------------------------------------------------ helpers
     tdc::Pattern& pattern(const std::string& name = {})
     {
@@ -194,12 +214,14 @@ private:
         }
     }
 
+    std::string backup_root() const { return tdc::path_join(tdc::path_join(work_, "backup"), tdc::base_name(project_->folder)); }
+
     // First edit of a project file keeps the original under _work/backup for restore_sheets.
     void backup(const std::string& path)
     {
         const std::string& root = project_->folder;
         if (path.rfind(root, 0) != 0 || path.size() <= root.size()) return;
-        const std::string dst = tdc::path_join(tdc::path_join(work_, "backup"), path.substr(root.size() + 1));
+        const std::string dst = tdc::path_join(backup_root(), path.substr(root.size() + 1));
         if (tdc::file_exists(dst)) return;
         tdc::make_dirs(tdc::parent_dir(dst));
         tdc::write_file(dst, tdc::read_file(path));
@@ -251,6 +273,44 @@ private:
         return out;
     }
 
+    // A change of the vector table: undoable as one step, and all or none when it fails.
+    Json pattern_edit(const std::function<Json(tdc::Pattern&)>& edit)
+    {
+        return editing([&] {
+            tdc::Pattern& p = pattern();
+            p.checkpoint();
+            try {
+                return edit(p);
+            } catch (...) {
+                p.undo();
+                throw;
+            }
+        });
+    }
+
+    void edit_cell(tdc::Pattern& p, const Json& a)
+    {
+        const int v = a.integer("v", -1);
+        if (v < 0) throw std::invalid_argument("无效的向量");
+        const std::string field = a.str("field"), value = a.str("value");
+        if (field.rfind("pin:", 0) == 0) {
+            p.set_state(size_t(v), field.substr(4), tdc::trim(value));
+        } else if (field == "instruction") {
+            p.set_instruction(size_t(v), value);
+        } else if (field == "label") {
+            p.set_label(size_t(v), value);
+        } else if (field == "comment") {
+            p.set_comment(size_t(v), value);
+        } else if (field == "timeset") {
+            const auto allowed = sheet_timesets(p);
+            if (std::find(allowed.begin(), allowed.end(), value) == allowed.end())
+                throw std::invalid_argument("时序集 " + value + " 不在这个图形的时序表里");
+            p.set_timeset(size_t(v), value);
+        } else {
+            throw std::invalid_argument("未知字段 " + field);
+        }
+    }
+
     Json gen_info()
     {
         tdc::Pattern& p = pattern();
@@ -275,6 +335,91 @@ private:
                         {"patterns", int(pr.patterns.size())}, {"current", current_},
                         {"levels", tdc::base_name(pr.levels_path)}, {"timing", tdc::base_name(pr.timing_path)},
                         {"specs", tdc::base_name(pr.specs_path)}, {"work_dir", work_}, {"busy_delay_us", busy_delay_ * 1e6}};
+        });
+
+        // ---- projects and export ----
+        method("project_list", "Projects in the projects folder, for the selector", {}, [this](const Json&) {
+            Json list = Json::array();
+            for (auto& name : tdc::sub_dirs(projects_dir_))
+                list.push_back(Json{{"label", name}, {"value", tdc::path_join(projects_dir_, name)}});
+            return kv("projects", list);
+        });
+
+        method("project_open", "Open a project: a folder in the projects folder, or a full path", {"path"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string raw = tdc::trim(a.str("path"));
+                if (raw.empty()) throw std::invalid_argument("请填写工程名或完整路径");
+                const std::string folder = is_absolute(raw) ? raw : tdc::path_join(projects_dir_, raw);
+                if (tdc::find_files(folder, ".pinmap").empty()) throw std::invalid_argument(folder + " 里没有 .pinmap，不是工程");
+                open_project(folder, std::string());
+                log("info", "已打开工程 " + project_->folder);
+                return kv("project", project_->folder);
+            });
+        });
+
+        method("project_new", "Create a project in the projects folder and open it", {"name"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = tdc::trim(a.str("name"));
+                if (!tdc::valid_name(name)) throw std::invalid_argument("工程名 '" + name + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+                const std::string folder = tdc::path_join(projects_dir_, name);
+                if (tdc::file_exists(folder)) throw std::invalid_argument("已有工程 " + name);
+                tdc::new_project(folder, seed_pattern_, instrument_name_);
+                open_project(folder, "main");
+                log("info", "已新建工程 " + name);
+                return kv("project", folder);
+            });
+        });
+
+        method("pattern_new", "Add a pattern to the project: one halt vector on the connected pins", {"name"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = tdc::trim(a.str("name"));
+                if (!tdc::valid_name(name)) throw std::invalid_argument("图形名 '" + name + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+                if (project_->find(name)) throw std::invalid_argument("已有图形 " + name);
+                if (project_->timing.empty()) throw std::invalid_argument("工程里没有时序集");
+                std::vector<std::string> pins;
+                for (auto& pin : project_->pinmap.pins) if (project_->pinmap.connections.count(pin)) pins.push_back(pin);
+                const std::string path = tdc::path_join(tdc::path_join(project_->folder, "Patterns"), name + ".digipat");
+                tdc::make_dirs(tdc::parent_dir(path));
+                tdc::write_file(path, pattern().data);
+                project_->rescan();
+                tdc::Pattern& p = pattern(name);
+                try {
+                    p.clear(name, pins, project_->timing.front().first);
+                } catch (const std::exception&) {
+                    std::remove(path.c_str());
+                    project_->rescan();
+                    throw;
+                }
+                const std::string bytes = p.patched_bytes();
+                tdc::write_file(path, bytes);
+                p.commit(bytes);
+                p.mtime = tdc::file_mtime(path);
+                current_ = name;
+                return kv("pattern", name);
+            });
+        });
+
+        method("export_plugin", "Export the project as a task plugin: a folder with the runner DLL, plugin.json, page and project",
+               {"id", "name"}, [this](const Json& a) {
+            return editing([&] {
+                for (auto& p : project_->patterns)
+                    if (p->modified()) throw std::invalid_argument("图形 " + p->file + " 有未保存的修改，先保存");
+                tdc::ExportSpec s;
+                s.id = tdc::trim(a.str("id"));
+                s.name = tdc::trim(a.str("name"));
+                if (s.name.empty()) s.name = s.id;
+                s.version = "1.0.0";
+                s.pattern = current_;
+                s.project = project_->folder;
+                s.page = tdc::path_join(plugin_dir_, "page.json");
+                s.library = tdc::library_path();
+                s.root = export_root_;
+                if (tdc::path_join(s.root, s.id) == tdc::parent_dir(project_->folder))
+                    throw std::invalid_argument("当前工程就在要导出的插件里，请换一个 id");
+                const std::string dest = tdc::export_plugin(s);
+                log("info", "已导出插件 " + s.id + "：" + dest + "，点“重新扫描插件”加载");
+                return Json{{"id", s.id}, {"folder", dest}, {"text", dest}};
+            });
         });
 
         method("list_patterns", "Pattern names for the selector", {}, [this](const Json&) {
@@ -329,38 +474,39 @@ private:
 
         method("edit_vector", "Change one cell of the vector table (field: pin:<name>, instruction, timeset, label, comment)",
                {"v", "field", "value"}, [this](const Json& a) {
-            return editing([&] {
-                tdc::Pattern& p = pattern();
-                const int v = a.integer("v", -1);
-                if (v < 0) throw std::invalid_argument("无效的向量");
-                const std::string field = a.str("field"), value = a.str("value");
-                if (field.rfind("pin:", 0) == 0) p.set_state(size_t(v), field.substr(4), tdc::trim(value));
-                else if (field == "instruction") p.set_instruction(size_t(v), value);
-                else if (field == "label") p.set_label(size_t(v), value);
-                else if (field == "comment") p.set_comment(size_t(v), value);
-                else if (field == "timeset") {
-                    const auto allowed = sheet_timesets(p);
-                    if (std::find(allowed.begin(), allowed.end(), value) == allowed.end())
-                        throw std::invalid_argument("时序集 " + value + " 不在这个图形的时序表里");
-                    p.set_timeset(size_t(v), value);
-                } else throw std::invalid_argument("未知字段 " + field);
-                return Json{{"v", v}, {"field", field}, {"modified", p.modified()}};
+            return pattern_edit([&](tdc::Pattern& p) {
+                edit_cell(p, a);
+                return Json{{"modified", p.modified()}};
             });
         });
 
-        method("vector_insert", "Insert a vector after v: same pin states and timeset, no instruction", {"v"}, [this](const Json& a) {
-            return editing([&] {
-                tdc::Pattern& p = pattern();
-                p.insert_vector(size_t(std::max(0, a.integer("v", 0))));
+        method("edit_vectors", "Change several cells at once, all or none: cells = [{v, field, value}, ...]", {"cells"}, [this](const Json& a) {
+            return pattern_edit([&](tdc::Pattern& p) {
+                for (auto& cell : a["cells"].items()) edit_cell(p, cell);
+                return Json{{"cells", int(a["cells"].size())}, {"modified", p.modified()}};
+            });
+        });
+
+        method("vector_insert", "Insert count vectors after v: same pin states and timeset, no instruction", {"v", "count"}, [this](const Json& a) {
+            return pattern_edit([&](tdc::Pattern& p) {
+                const int v = std::max(0, a.integer("v", 0));
+                for (int i = 0; i < std::max(1, a.integer("count", 1)); ++i) p.insert_vector(size_t(v));
                 return kv("vectors", int(p.base_ins.size()));
             });
         });
 
-        method("vector_delete", "Delete vector v; a label on it moves to the next vector", {"v"}, [this](const Json& a) {
-            return editing([&] {
-                tdc::Pattern& p = pattern();
-                p.remove_vector(size_t(std::max(0, a.integer("v", 0))));
+        method("vector_delete", "Delete count vectors from v; a label on them moves to the next vector", {"v", "count"}, [this](const Json& a) {
+            return pattern_edit([&](tdc::Pattern& p) {
+                const int v = std::max(0, a.integer("v", 0));
+                for (int i = 0; i < std::max(1, a.integer("count", 1)); ++i) p.remove_vector(size_t(v));
                 return kv("vectors", int(p.base_ins.size()));
+            });
+        });
+
+        method("vector_undo", "Undo the last change of the vector table", {}, [this](const Json&) {
+            return editing([&] {
+                if (!pattern().undo()) throw std::invalid_argument("没有可撤销的修改");
+                return kv("modified", pattern().modified());
             });
         });
 
@@ -369,14 +515,18 @@ private:
                 const std::string pin = a.str("pin");
                 const auto& pins = project_->pinmap.pins;
                 if (std::find(pins.begin(), pins.end(), pin) == pins.end()) throw std::invalid_argument("引脚 " + pin + " 不在引脚映射里");
-                pattern().add_pin(pin);
+                tdc::Pattern& p = pattern();
+                p.checkpoint();
+                p.add_pin(pin);
                 return kv("pin", pin);
             });
         });
 
         method("pattern_remove_pin", "Remove a pin column from the current pattern", {"pin"}, [this](const Json& a) {
             return editing([&] {
-                pattern().remove_pin(a.str("pin"));
+                tdc::Pattern& p = pattern();
+                if (std::find(p.pins.begin(), p.pins.end(), a.str("pin")) != p.pins.end()) p.checkpoint();
+                p.remove_pin(a.str("pin"));
                 return kv("pin", a.str("pin"));
             });
         });
@@ -623,8 +773,57 @@ private:
             return Json{{"name", name}, {"value", value}, {"clamped", false}};
         });
 
-        method("levels", "Pin levels with formulas evaluated against the specifications", {}, [this](const Json&) {
-            const auto sym = tdc::spec_symbols(specs_now());
+        method("spec_rows", "Specifications as written in the sheet: symbol, definition, value, comment", {}, [this](const Json&) {
+            const auto sym = tdc::spec_symbols(project_->specs);
+            Json rows = Json::array();
+            for (auto& s : project_->specs) {
+                auto it = sym.find(s.key());
+                rows.push_back(Json{{"key", s.key()}, {"section", s.section}, {"symbol", s.symbol}, {"definition", s.definition},
+                                    {"value", it != sym.end() ? tdc::fmt_g(it->second, 6) : std::string("无法求值")}, {"comment", s.comment}});
+            }
+            return kv("rows", rows);
+        });
+
+        method("set_spec_text", "Write a specification to the sheet (field: definition, comment)", {"key", "field", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string key = a.str("key"), field = a.str("field");
+                const size_t dot = key.find('.');
+                if (dot == std::string::npos) throw std::invalid_argument("无效的规格 " + key);
+                std::string value = tdc::trim(a.str("value"));
+                if (field == "definition") value = checked(value, key);
+                else if (field != "comment") throw std::invalid_argument("未知字段 " + field);
+                edit_sheet(project_->specs_path, [&](std::string& x) {
+                    tdc::specs_set(x, key.substr(0, dot), key.substr(dot + 1), field == "definition" ? "Definition" : "Comment", value);
+                });
+                spec_values_.erase(key);
+                return Json{{"key", key}, {"field", field}, {"value", value}};
+            });
+        });
+
+        method("add_spec", "Add a specification: key = Section.Symbol, section created when new", {"key", "definition"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string key = tdc::trim(a.str("key"));
+                const size_t dot = key.find('.');
+                if (dot == std::string::npos || !tdc::valid_name(key.substr(0, dot)) || !tdc::valid_name(key.substr(dot + 1)))
+                    throw std::invalid_argument("规格名应写成 分组.符号，如 DC.VCC");
+                const std::string value = checked(a.str("definition").empty() ? "0" : a.str("definition"), key);
+                edit_sheet(project_->specs_path, [&](std::string& x) { tdc::specs_add(x, key.substr(0, dot), key.substr(dot + 1), value); });
+                return kv("key", key);
+            });
+        });
+
+        method("remove_spec", "Delete a specification", {"key"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string key = a.str("key");
+                const size_t dot = key.find('.');
+                if (dot == std::string::npos) throw std::invalid_argument("无效的规格 " + key);
+                edit_sheet(project_->specs_path, [&](std::string& x) { tdc::specs_remove(x, key.substr(0, dot), key.substr(dot + 1)); });
+                spec_values_.erase(key);
+                return kv("key", key);
+            });
+        });
+
+        method("levels", "Pin levels with formulas evaluated against the specifications", {}, [this](const Json&) {            const auto sym = tdc::spec_symbols(specs_now());
             Json rows = Json::array();
             for (auto& lv : project_->levels) {
                 Json row{{"pin", lv.pin}};
@@ -704,8 +903,9 @@ private:
             return kv("rows", rows);
         });
 
-        method("timeset_options", "Timeset names for the selectors", {}, [this](const Json&) {
+        method("timeset_options", "Timeset names for the selectors (all=true: with an entry for every timeset)", {"all"}, [this](const Json& a) {
             Json list = Json::array();
+            if (a.boolean("all", false)) list.push_back(Json{{"label", "全部时序集"}, {"value", ""}});
             for (auto& [name, ts] : project_->timing) {
                 (void)ts;
                 list.push_back(Json{{"label", name}, {"value", name}});
@@ -791,9 +991,9 @@ private:
 
         method("restore_sheets", "Put back the project files as they were before the first edit", {}, [this](const Json&) {
             return editing([&] {
-                const std::string root = tdc::path_join(work_, "backup");
+                const std::string root = backup_root();
                 int restored = 0;
-                for (const char* ext : {".pinmap", ".digilevels", ".digitiming", ".digipat"}) {
+                for (const char* ext : {".pinmap", ".specs", ".digilevels", ".digitiming", ".digipat"}) {
                     for (auto& path : tdc::find_files(root, ext)) {
                         tdc::write_file(tdc::path_join(project_->folder, path.substr(root.size() + 1)), tdc::read_file(path));
                         std::remove(path.c_str());
@@ -809,7 +1009,7 @@ private:
         });
 
         method("timeset_edges", "Drive format and edges of every pin in each timeset, as in the editor's timing sheet "
-                                "(pattern=current: only the timesets and pins of the current pattern)", {"pattern"},
+                                "(pattern=current: only the timesets and pins of the current pattern; timeset: only that one)", {"pattern", "timeset"},
                [this](const Json& a) {
             const tdc::TimingModel tm = model();
             std::vector<std::string> only_ts, only_pins;
@@ -823,8 +1023,9 @@ private:
             };
             auto edge = [](double v) { return std::isfinite(v) ? tdc::fmt_time(v) : std::string("\xE2\x80\x94"); };
             Json rows = Json::array();
+            const std::string one = a.str("timeset");
             for (auto& [name, ts] : project_->timing) {
-                if (!in(only_ts, name)) continue;
+                if (!in(only_ts, name) || (!one.empty() && name != one)) continue;
                 auto mt = tm.find(name);
                 if (mt == tm.end()) continue;
                 const tdc::TimesetModel& m = mt->second;
@@ -1246,6 +1447,7 @@ private:
     };
 
     std::string plugin_dir_, work_, gen_dir_, gen_template_, current_, digital_;
+    std::string projects_dir_, instrument_name_, seed_pattern_, export_root_;
     std::unique_ptr<tdc::Project> project_;
     double busy_delay_ = 120e-6;
     bool simulate_ = true, instrument_ready_ = false, manual_trigger_ = false;

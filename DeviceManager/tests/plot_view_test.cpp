@@ -5,6 +5,7 @@
 
 #include <QDir>
 #include <QGuiApplication>
+#include <QThread>
 #include <QImage>
 #include <QMouseEvent>
 #include <QQuickWindow>
@@ -183,6 +184,45 @@ int main(int argc, char** argv)
     CHECK(near(r.xspan(), xs0));
     CHECK(near(r.yspan(), ys0 * std::exp(-1.0), 1e-6));
     r.reset();
+
+    // ---- click an axis to select it; then a box zooms only that axis; "自适应" restores
+    {
+        auto click = [&](QPointF p) {
+            r.mouse(QEvent::MouseButtonPress, p, Qt::LeftButton, Qt::LeftButton);
+            r.mouse(QEvent::MouseButtonRelease, p, Qt::LeftButton, Qt::NoButton);
+            r.render();
+        };
+        const QRectF pr = r.pr();
+        const QPointF a(pr.left() + pr.width() * 0.25, pr.top() + pr.height() * 0.25);
+        const QPointF b(pr.left() + pr.width() * 0.75, pr.top() + pr.height() * 0.75);
+        click(QPointF(c.x(), pr.bottom() + 10));
+        CHECK(plot.zoomAxis() == "x");
+        r.save("plot_axis_x_selected.png");
+        r.drag(a, b);                                      // a square box, X only
+        CHECK(near(r.xspan(), xs0 * 0.5, 1e-3));
+        CHECK(near(r.yspan(), ys0));
+        r.render();
+        r.save("plot_axis_x_zoomed.png");
+        CHECK(!plot.autoRange());
+        const QRectF fit = plot.fitButtonRect();
+        CHECK(!fit.isEmpty());
+        QThread::msleep(500);                                 // not a double click
+        click(fit.center());
+        CHECK(plot.autoRange());
+        CHECK(near(r.xspan(), xs0));
+        CHECK(plot.zoomAxis() == "x");                     // the selection stays for the next box
+        QThread::msleep(500);
+        click(QPointF(pr.left() - 10, c.y()));             // select Y instead
+        CHECK(plot.zoomAxis() == "y");
+        r.drag(a, b);
+        CHECK(near(r.xspan(), xs0));
+        CHECK(near(r.yspan(), ys0 * 0.5, 1e-3));
+        QThread::msleep(500);
+        click(QPointF(pr.left() - 10, c.y()));             // click again: deselect
+        CHECK(plot.zoomAxis().isEmpty());
+        r.reset();
+        QThread::msleep(500);
+    }
 
     // ---- right drag pans, span unchanged
     {

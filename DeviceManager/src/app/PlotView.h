@@ -13,9 +13,11 @@
 // Large data stays fast: the visible range is found by binary search and drawn with
 // min/max-per-pixel-column decimation, so a million points cost about as much as a thousand.
 //
-// Mouse: drag a box to zoom (a flat box zooms X only, a tall one Y only); the wheel zooms
-// around the pointer (Ctrl = X only, Shift = Y only, over an axis = that axis); dragging on
-// an axis scales it; right / middle drag pans; double click returns to automatic ranges.
+// Mouse: click the X or Y axis to select it (highlighted; click again to deselect), then a
+// left-drag box zooms only that axis; with no axis selected a box zooms both (a flat box X
+// only, a tall one Y only). The "自适应" button in the plot (or a double click) returns to
+// automatic ranges. The wheel zooms around the pointer (Ctrl = X only, Shift = Y only, over
+// an axis = that axis); dragging on an axis scales it; right / middle drag pans.
 //
 //   PlotView { xLabel: "t"; xUnit: "s" }  +  setData(xs, [{ label, values, xs?, unit, color, axis }])
 //   trend:   xMode: "ago"; followSpan: 30; append(series, t, v); xNow: Date.now() / 1000
@@ -46,6 +48,7 @@ class PlotView : public QQuickPaintedItem {
     Q_PROPERTY(double xNow MEMBER m_xNow NOTIFY styleChanged)              // right edge while following
     Q_PROPERTY(double keepSpan MEMBER m_keepSpan NOTIFY styleChanged)      // append(): history kept
     Q_PROPERTY(bool autoRange READ autoRange NOTIFY viewChanged)
+    Q_PROPERTY(QString zoomAxis READ zoomAxis WRITE setZoomAxis NOTIFY viewChanged)   // "" | "x" | "y"
     Q_PROPERTY(int pointCount READ pointCount NOTIFY dataChanged)
     Q_PROPERTY(double lastPaintMs READ lastPaintMs)               // written on the render thread
     // current view, for tests and for pages that want to show it
@@ -71,6 +74,9 @@ public:
                    const QString& unit = {});
 
     bool autoRange() const { return m_autoX && m_autoY; }
+    QString zoomAxis() const { return m_zoomAxis; }
+    void setZoomAxis(const QString& a);
+    QRectF fitButtonRect() const { return m_fitBtn; }
     int pointCount() const;
     double lastPaintMs() const { return m_lastPaintMs; }
     double viewXMin() const { return m_x0; }
@@ -142,6 +148,9 @@ private:
     double m_x0 = 0, m_x1 = 1, m_y0[2] = {0, 0}, m_y1[2] = {1, 1};
     double m_xRef = 0;                 // "ago" labels are relative to this
     QRectF m_plot;                     // plot area of the last paint
+    QRectF m_fitBtn;                   // "自适应" button of the last paint
+    QString m_zoomAxis;                // axis selected by a click: "" | "x" | "y"
+    bool m_pressOnFit = false;
     double m_lastPaintMs = 0;
 
     // interaction

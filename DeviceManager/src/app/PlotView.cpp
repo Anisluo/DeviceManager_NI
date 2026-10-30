@@ -277,6 +277,15 @@ void PlotView::resetView()
     update();
 }
 
+void PlotView::setZoomAxis(const QString& a)
+{
+    const QString v = (a == QLatin1String("x") || a == QLatin1String("y")) ? a : QString();
+    if (v == m_zoomAxis) return;
+    m_zoomAxis = v;
+    emit viewChanged();
+    update();
+}
+
 void PlotView::setCursors(bool on)
 {
     if (on == m_cursors) return;
@@ -556,6 +565,23 @@ void PlotView::paint(QPainter* p)
     p->drawLine(QLineF(ml, mt, ml, mt + ph));
     p->drawLine(QLineF(ml, mt + ph, ml + pw, mt + ph));
     if (right) p->drawLine(QLineF(ml + pw, mt, ml + pw, mt + ph));
+    // selected zoom axis: tinted band behind its labels and a thick accent line
+    if (!m_zoomAxis.isEmpty()) {
+        QColor band = m_accent;
+        band.setAlphaF(0.10f);
+        const bool xs = m_zoomAxis == QLatin1String("x");
+        if (xs) p->fillRect(QRectF(ml, mt + ph + 1, pw, mb - 2), band);
+        else {
+            p->fillRect(QRectF(1, mt, ml - 2, ph), band);
+            if (right) p->fillRect(QRectF(ml + pw + 1, mt, mr - 2, ph), band);
+        }
+        p->setPen(QPen(m_accent, 3));
+        if (xs) p->drawLine(QLineF(ml, mt + ph + 1, ml + pw, mt + ph + 1));
+        else {
+            p->drawLine(QLineF(ml - 1, mt, ml - 1, mt + ph));
+            if (right) p->drawLine(QLineF(ml + pw + 1, mt, ml + pw + 1, mt + ph));
+        }
+    }
 
     // ---- series
     p->setRenderHint(QPainter::Antialiasing, true);
@@ -712,7 +738,9 @@ void PlotView::paint(QPainter* p)
     // ---- rubber band
     if (m_drag == Drag::Box) {
         QRectF r = QRectF(m_press, m_last).normalized().intersected(m_plot);
-        if (r.width() < kMinBox && r.height() >= kMinBox) r = QRectF(ml, r.top(), pw, r.height());
+        if (m_zoomAxis == QLatin1String("x")) r = QRectF(r.left(), mt, r.width(), ph);
+        else if (m_zoomAxis == QLatin1String("y")) r = QRectF(ml, r.top(), pw, r.height());
+        else if (r.width() < kMinBox && r.height() >= kMinBox) r = QRectF(ml, r.top(), pw, r.height());
         else if (r.height() < kMinBox && r.width() >= kMinBox) r = QRectF(r.left(), mt, r.width(), ph);
         QColor fill = m_accent;
         fill.setAlphaF(0.12f);
@@ -761,11 +789,31 @@ void PlotView::paint(QPainter* p)
 
     // ---- zoom state / how-to hint
     QString hint;
-    if (!autoRange()) hint = QStringLiteral("已缩放 · 双击复位");
-    else if (hovering && m_interactive && !m_cursors) hint = QStringLiteral("拖框放大 · 滚轮缩放（Ctrl 仅 X，Shift 仅 Y）· 右键平移");
+    if (m_zoomAxis == QLatin1String("x")) hint = QStringLiteral("X 轴已选中：拖框只放大 X · 再点 X 轴取消");
+    else if (m_zoomAxis == QLatin1String("y")) hint = QStringLiteral("Y 轴已选中：拖框只放大 Y · 再点 Y 轴取消");
+    else if (hovering && m_interactive && !m_cursors)
+        hint = QStringLiteral("点 X 轴或 Y 轴后拖框，只放大该轴 · 滚轮缩放 · 右键平移");
+
+    // "自适应" button: back to automatic ranges (always shown, emphasised when zoomed)
+    m_fitBtn = QRectF();
+    if (m_interactive) {
+        const QString label = QStringLiteral("自适应");
+        const double bw = fm.horizontalAdvance(label) + 20, bh = 22;
+        m_fitBtn = QRectF(ml + pw - bw - 8, mt + ph - bh - 8, bw, bh);
+        const bool zoomed = !autoRange();
+        const bool hot = m_fitBtn.contains(m_hover);
+        QColor fill = zoomed ? m_accent : m_surface;
+        if (zoomed && hot) fill = fill.darker(110);
+        p->setPen(QPen(zoomed ? m_accent : (hot ? m_muted : m_border), 1));
+        p->setBrush(fill);
+        p->drawRoundedRect(m_fitBtn, 5, 5);
+        p->setBrush(Qt::NoBrush);
+        p->setPen(zoomed ? QColor(Qt::white) : (hot ? m_text : m_muted));
+        p->drawText(m_fitBtn, Qt::AlignCenter, label);
+    }
     if (!hint.isEmpty()) {
         p->setPen(m_faint);
-        p->drawText(QRectF(ml + 8, mt + ph - 20, pw - 16, 16), Qt::AlignLeft | Qt::AlignVCenter, hint);
+        p->drawText(QRectF(ml + 8, mt + ph - 20, pw - 16 - m_fitBtn.width() - 8, 16), Qt::AlignLeft | Qt::AlignVCenter, hint);
     }
 
     m_lastPaintMs = timer.nsecsElapsed() / 1e6;
@@ -789,9 +837,9 @@ void PlotView::updateCursorShape(Region r)
 {
     switch (r) {
     case Region::Plot:   setCursor(Qt::CrossCursor); break;
-    case Region::XAxis:  setCursor(Qt::SizeHorCursor); break;
+    case Region::XAxis:
     case Region::YLeft:
-    case Region::YRight: setCursor(Qt::SizeVerCursor); break;
+    case Region::YRight: setCursor(Qt::PointingHandCursor); break;   // click to select, drag to scale
     default:             unsetCursor(); break;
     }
 }
@@ -802,6 +850,13 @@ void PlotView::mousePressEvent(QMouseEvent* e)
     const Region r = regionAt(pos);
     if (!m_interactive || r == Region::None) { e->ignore(); return; }
     m_press = m_last = pos;
+    m_pressOnFit = false;
+    if (e->button() == Qt::LeftButton && m_fitBtn.contains(pos)) {
+        m_pressOnFit = true;
+        m_drag = Drag::None;
+        e->accept();
+        return;
+    }
     if (e->button() == Qt::LeftButton) {
         // Double click, detected here as well: Qt Quick does not always deliver
         // MouseButtonDblClick to a painted item that grabbed the first press.
@@ -874,9 +929,23 @@ void PlotView::mouseMoveEvent(QMouseEvent* e)
 void PlotView::mouseReleaseEvent(QMouseEvent* e)
 {
     const QPointF pos = e->position();
+    if (m_pressOnFit) {
+        m_pressOnFit = false;
+        if (m_fitBtn.contains(pos)) resetView();
+        e->accept();
+        return;
+    }
+    const bool click = QLineF(m_press, pos).length() < 4;
+    if (click && (m_drag == Drag::AxisX || m_drag == Drag::AxisY)) {
+        // a click (no drag) on an axis selects it for box zoom; clicking it again deselects
+        const QString a = m_drag == Drag::AxisX ? QStringLiteral("x") : QStringLiteral("y");
+        setZoomAxis(m_zoomAxis == a ? QString() : a);
+    }
     if (m_drag == Drag::Box) {
         const QRectF r = QRectF(m_press, pos).normalized().intersected(m_plot);
-        const bool zx = r.width() >= kMinBox, zy = r.height() >= kMinBox;
+        bool zx = r.width() >= kMinBox, zy = r.height() >= kMinBox;
+        if (m_zoomAxis == QLatin1String("x")) zy = false;
+        else if (m_zoomAxis == QLatin1String("y")) zx = false;
         if (zx) {
             const double lo = fromPx(r.left()), hi = fromPx(r.right());
             if (validSpan(lo, hi)) { m_x0 = lo; m_x1 = hi; m_autoX = false; }
@@ -925,7 +994,10 @@ void PlotView::wheelEvent(QWheelEvent* e)
 void PlotView::hoverMoveEvent(QHoverEvent* e)
 {
     m_hover = e->position();
-    if (m_drag == Drag::None) updateCursorShape(regionAt(m_hover));
+    if (m_drag == Drag::None) {
+        if (m_fitBtn.contains(m_hover)) setCursor(Qt::PointingHandCursor);
+        else updateCursorShape(regionAt(m_hover));
+    }
     update();
 }
 

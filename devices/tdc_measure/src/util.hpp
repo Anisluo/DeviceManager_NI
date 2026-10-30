@@ -37,6 +37,9 @@ double evaluate(const std::string& expr, const std::map<std::string, double>& sy
 // "1.37066 ms", "1.371 分钟", "50.4 天"; "—" for NaN.
 std::string fmt_time(double seconds, int digits = 6);
 std::string fmt_g(double v, int digits = 6);
+std::string trim(const std::string& s);
+// Pattern, label, pin and timeset names: letters, digits, '_', not starting with a digit.
+bool valid_name(const std::string& n);
 
 // ---- files (UTF-8 paths) ----
 std::string read_file(const std::string& path);

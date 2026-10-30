@@ -18,6 +18,7 @@ Loader {
         "readout": readoutComp,
         "trend":   trendComp,
         "table":   tableComp,
+        "edit_table": editTableComp,
         "log":     logComp,
         "script":  scriptComp,
         "xy":      xyComp,
@@ -37,6 +38,7 @@ Loader {
     Component { id: readoutComp; ReadoutWidget { spec: host.spec; ctx: host.pageCtx } }
     Component { id: trendComp;   TrendWidget   { spec: host.spec; ctx: host.pageCtx } }
     Component { id: tableComp;   TableWidget   { spec: host.spec; ctx: host.pageCtx } }
+    Component { id: editTableComp; EditTableWidget { spec: host.spec; ctx: host.pageCtx } }
     Component { id: logComp;     LogWidget     { spec: host.spec; ctx: host.pageCtx } }
     Component { id: scriptComp;  ScriptWidget  { spec: host.spec; ctx: host.pageCtx } }
     Component { id: xyComp;      XyWidget      { spec: host.spec; ctx: host.pageCtx } }

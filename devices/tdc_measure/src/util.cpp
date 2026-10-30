@@ -77,14 +77,6 @@ std::string unescape(const std::string& s)
     return out;
 }
 
-std::string trim(const std::string& s)
-{
-    size_t a = 0, b = s.size();
-    while (a < b && std::isspace(static_cast<unsigned char>(s[a]))) ++a;
-    while (b > a && std::isspace(static_cast<unsigned char>(s[b - 1]))) --b;
-    return s.substr(a, b - a);
-}
-
 struct XmlParser {
     const std::string& s;
     size_t p = 0;
@@ -360,6 +352,21 @@ double file_mtime(const std::string& path)
     std::error_code ec;
     const auto t = fs::last_write_time(P(path), ec);
     return ec ? 0.0 : double(t.time_since_epoch().count());
+}
+
+std::string trim(const std::string& s)
+{
+    const char* space = " \t\r\n";
+    const size_t a = s.find_first_not_of(space);
+    return a == std::string::npos ? std::string() : s.substr(a, s.find_last_not_of(space) - a + 1);
+}
+
+bool valid_name(const std::string& n)
+{
+    if (n.empty() || !(std::isalpha(static_cast<unsigned char>(n[0])) || n[0] == '_')) return false;
+    for (char c : n)
+        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
+    return true;
 }
 
 std::string path_join(const std::string& a, const std::string& b)

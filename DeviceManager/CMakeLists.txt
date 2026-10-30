@@ -66,6 +66,7 @@ set(DM_QML_FILES
     qml/page/ReadoutWidget.qml
     qml/page/TrendWidget.qml
     qml/page/TableWidget.qml
+    qml/page/EditTableWidget.qml
     qml/page/LogWidget.qml
     qml/page/PlaceholderWidget.qml
     qml/controls/Card.qml

@@ -3,7 +3,8 @@ import QtQuick.Layouts
 import DeviceManager
 
 // { type: "button", label, style: "primary"|"secondary"|"ghost", action, reload_page,
-//   publish: "<source id>" — the result feeds readouts / tables bound to that source }
+//   publish: "<source id>" — the result feeds readouts / tables bound to that source,
+//   refresh: ["<source id>"] — poll these sources right after the call }
 RowLayout {
     id: w
     property var spec: ({})
@@ -17,6 +18,7 @@ RowLayout {
             busy = false
             if (ok && spec.publish) ctx.publish(spec.publish, res)
             if (ok && spec.reload_page) ctx.reinitRequested()
+            if (ok) for (const id of spec.refresh || []) ctx.refresh(id)
         })
     }
 

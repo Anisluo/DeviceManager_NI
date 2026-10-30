@@ -278,10 +278,11 @@ class DriverBackend:
 
     def burst_start(self, path, label, seconds):
         pr = self._proj()
-        if pr["loaded"] != path:
+        loaded = (path, os.path.getmtime(path))         # an edited pattern keeps its path
+        if pr["loaded"] != loaded:
             self.s.unload_all_patterns()
             self.s.load_pattern(path)
-            pr["loaded"] = path
+            pr["loaded"] = loaded
         self.s.burst_pattern(label, select_digital_function=True, wait_until_done=False)
 
     def burst_done(self):

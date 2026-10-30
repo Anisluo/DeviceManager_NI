@@ -59,6 +59,13 @@ Item {
         sourceUpdated(id, data)
     }
 
+    // Poll one source now, e.g. after a write it depends on.
+    function refresh(id) {
+        const src = (page.sources || []).find(s => s.id === id)
+        if (!src || !device) return
+        device.call(src.method, Fmt.substitute(src.args || {}, undefined, form), (ok, res) => { if (ok) publish(id, res) })
+    }
+
     // Read an initial value: { method, args, field }
     function read(init, cb) {
         if (!init || !init.method || !device || !device.online) return

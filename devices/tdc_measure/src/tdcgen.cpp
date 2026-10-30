@@ -24,22 +24,6 @@ uint32_t ins(unsigned op, unsigned operand = 0, unsigned flags = 0, unsigned ts 
     return (uint32_t(op) << 28) | (uint32_t(ts) << 23) | (uint32_t(flags) << 16) | (operand & 0xFFFFu);
 }
 
-unsigned state_code(char c)
-{
-    switch (c) {
-    case '0': return 0; case '1': return 1; case 'L': return 3; case 'H': return 4;
-    default: return 5;                                   // X
-    }
-}
-
-bool valid_name(const std::string& n)
-{
-    if (n.empty() || !(std::isalpha(static_cast<unsigned char>(n[0])) || n[0] == '_')) return false;
-    for (char c : n)
-        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '_')) return false;
-    return true;
-}
-
 double getnum(const dm::Json& p, const char* k) { return p[k].is_string() ? std::atof(p[k].as_string().c_str()) : p[k].as_number(); }
 std::string getstr(const dm::Json& p, const char* k) { return p[k].is_string() ? p[k].as_string() : std::string(); }
 

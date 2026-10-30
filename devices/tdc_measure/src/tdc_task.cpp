@@ -6,6 +6,7 @@
 // itself: every instrument action is a host call to that device ("pattern_project",
 // "pattern_timing", "pattern_specs", "pattern_start", "pattern_status", "pattern_abort").
 #include "project.hpp"
+#include "sheets.hpp"
 #include "tdcgen.hpp"
 #include "util.hpp"
 
@@ -14,6 +15,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <random>
 
@@ -24,7 +26,7 @@ using Clock = std::chrono::steady_clock;
 static const char* kManifest = R"({
   "id": "tdc_measure",
   "name": "TDC测量",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "cpp",
   "abi": 1,
   "category": "task",
@@ -102,7 +104,8 @@ private:
     const Json& analysis(const std::string& name = {})
     {
         tdc::Pattern& p = pattern(name);
-        std::string key = p.file + "|" + std::to_string(p.mtime) + "|" + std::to_string(busy_delay_);
+        std::string key = p.file + "|" + std::to_string(p.mtime) + "|" + std::to_string(busy_delay_) + "|" +
+                          std::to_string(p.revision) + "|" + std::to_string(sheet_rev_);
         for (auto& [i, v] : p.edits) key += "|" + std::to_string(i) + "=" + std::to_string(v);
         for (auto& [k, v] : spec_values_) key += "|" + k + "=" + v;
         auto it = cache_.find(key);
@@ -171,12 +174,81 @@ private:
                 p.edits = saved;
             }
         }
-        if (!single && p.edits.empty()) return p.path;
+        if (!single && !p.modified()) return p.path;
         const std::string folder = tdc::path_join(work_, "run");
         tdc::make_dirs(folder);
         const std::string path = tdc::path_join(folder, p.file + (single ? "_once" : "") + ".digipat");
         tdc::write_file(path, data);
         return path;
+    }
+
+    // ------------------------------------------------------------------ editing
+    // Runs an edit while no burst is active; invalid input becomes a page error.
+    Json editing(const std::function<Json()>& edit)
+    {
+        if (run_.state == "running") throw PluginError(DM_E_STATE, "图形正在运行，先中止");
+        try {
+            return edit();
+        } catch (const std::invalid_argument& e) {
+            throw PluginError(DM_E_BAD_ARGS, e.what());
+        }
+    }
+
+    // First edit of a project file keeps the original under _work/backup for restore_sheets.
+    void backup(const std::string& path)
+    {
+        const std::string& root = project_->folder;
+        if (path.rfind(root, 0) != 0 || path.size() <= root.size()) return;
+        const std::string dst = tdc::path_join(tdc::path_join(work_, "backup"), path.substr(root.size() + 1));
+        if (tdc::file_exists(dst)) return;
+        tdc::make_dirs(tdc::parent_dir(dst));
+        tdc::write_file(dst, tdc::read_file(path));
+    }
+
+    // Edit a sheet on disk; the next burst loads it into the instrument again.
+    void edit_sheet(const std::string& path, const std::function<void(std::string&)>& edit)
+    {
+        if (path.empty()) throw std::invalid_argument("工程里没有这个文件");
+        std::string text = tdc::read_file(path);
+        edit(text);
+        backup(path);
+        tdc::write_file(path, text);
+        project_->reload_sheets();
+        instrument_ready_ = false;
+        ++sheet_rev_;
+    }
+
+    std::string sheet_of(const std::string& timeset) const
+    {
+        auto it = project_->timing_file.find(timeset);
+        if (it == project_->timing_file.end()) throw std::invalid_argument("没有时序集 " + timeset);
+        return it->second;
+    }
+
+    // A period, edge or level: a quantity or a formula over the specifications.
+    std::string checked(const std::string& raw, const std::string& what, bool positive = false) const
+    {
+        const std::string text = tdc::trim(raw);
+        double v = 0;
+        try {
+            if (text.empty() || !tdc::parse_quantity(text, v)) v = tdc::evaluate(text, tdc::spec_symbols(specs_now()));
+        } catch (const std::exception&) {
+            throw std::invalid_argument(what + " '" + text + "' 无法求值");
+        }
+        if (positive && !(v > 0)) throw std::invalid_argument(what + " 必须大于 0");
+        return text;
+    }
+
+    // Timesets a pattern can use: one burst applies one timing sheet.
+    std::vector<std::string> sheet_timesets(const tdc::Pattern& p) const
+    {
+        auto first = project_->timing_file.find(p.timesets.empty() ? std::string() : p.timesets[0]);
+        std::vector<std::string> out;
+        for (auto& [name, ts] : project_->timing) {
+            (void)ts;
+            if (first == project_->timing_file.end() || project_->timing_file.at(name) == first->second) out.push_back(name);
+        }
+        return out;
     }
 
     Json gen_info()
@@ -233,9 +305,13 @@ private:
         method("vectors", "Decoded vectors of the current pattern", {}, [this](const Json&) {
             tdc::Pattern& p = pattern();
             const tdc::TimingModel tm = model();
-            Json rows = Json::array();
+            Json rows = Json::array(), pin_list = Json::array(), ts_options = Json::array();
             std::string pins;
-            for (auto& pin : p.pins) pins += (pins.empty() ? "" : " ") + pin;
+            for (auto& pin : p.pins) {
+                pins += (pins.empty() ? "" : " ") + pin;
+                pin_list.push_back(pin);
+            }
+            for (auto& ts : sheet_timesets(p)) ts_options.push_back(ts);
             for (size_t i = 0; i < p.base_ins.size(); ++i) {
                 const std::string ts = p.timeset_of(i);
                 rows.push_back(Json{{"v", int(i)}, {"label", p.label_at(i)}, {"states", p.states[i]},
@@ -243,7 +319,80 @@ private:
                                     {"period", tdc::fmt_time(period_of(tm, ts))},
                                     {"comment", p.comments[i]}, {"edited", p.edits.count(i) ? "✎" : ""}});
             }
-            return Json{{"pattern", p.file}, {"label", p.name}, {"pins", pins}, {"rows", rows}, {"vector_count", int(rows.size())}};
+            std::string rev = p.file + "|" + std::to_string(p.revision) + "|" + std::to_string(sheet_rev_) + "|" + std::to_string(p.mtime);
+            for (auto& [i, v] : p.edits) rev += "|" + std::to_string(i) + "=" + std::to_string(v);
+            for (auto& [k, v] : spec_values_) rev += "|" + k + "=" + v;
+            return Json{{"pattern", p.file}, {"label", p.name}, {"pins", pins}, {"pin_list", pin_list},
+                        {"ts_options", ts_options}, {"rows", rows}, {"vector_count", int(rows.size())}, {"rev", rev},
+                        {"modified", p.modified()}};
+        });
+
+        method("edit_vector", "Change one cell of the vector table (field: pin:<name>, instruction, timeset, label, comment)",
+               {"v", "field", "value"}, [this](const Json& a) {
+            return editing([&] {
+                tdc::Pattern& p = pattern();
+                const int v = a.integer("v", -1);
+                if (v < 0) throw std::invalid_argument("无效的向量");
+                const std::string field = a.str("field"), value = a.str("value");
+                if (field.rfind("pin:", 0) == 0) p.set_state(size_t(v), field.substr(4), tdc::trim(value));
+                else if (field == "instruction") p.set_instruction(size_t(v), value);
+                else if (field == "label") p.set_label(size_t(v), value);
+                else if (field == "comment") p.set_comment(size_t(v), value);
+                else if (field == "timeset") {
+                    const auto allowed = sheet_timesets(p);
+                    if (std::find(allowed.begin(), allowed.end(), value) == allowed.end())
+                        throw std::invalid_argument("时序集 " + value + " 不在这个图形的时序表里");
+                    p.set_timeset(size_t(v), value);
+                } else throw std::invalid_argument("未知字段 " + field);
+                return Json{{"v", v}, {"field", field}, {"modified", p.modified()}};
+            });
+        });
+
+        method("vector_insert", "Insert a vector after v: same pin states and timeset, no instruction", {"v"}, [this](const Json& a) {
+            return editing([&] {
+                tdc::Pattern& p = pattern();
+                p.insert_vector(size_t(std::max(0, a.integer("v", 0))));
+                return kv("vectors", int(p.base_ins.size()));
+            });
+        });
+
+        method("vector_delete", "Delete vector v; a label on it moves to the next vector", {"v"}, [this](const Json& a) {
+            return editing([&] {
+                tdc::Pattern& p = pattern();
+                p.remove_vector(size_t(std::max(0, a.integer("v", 0))));
+                return kv("vectors", int(p.base_ins.size()));
+            });
+        });
+
+        method("pattern_add_pin", "Add a pin of the pin map to the current pattern (a column of X)", {"pin"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string pin = a.str("pin");
+                const auto& pins = project_->pinmap.pins;
+                if (std::find(pins.begin(), pins.end(), pin) == pins.end()) throw std::invalid_argument("引脚 " + pin + " 不在引脚映射里");
+                pattern().add_pin(pin);
+                return kv("pin", pin);
+            });
+        });
+
+        method("pattern_remove_pin", "Remove a pin column from the current pattern", {"pin"}, [this](const Json& a) {
+            return editing([&] {
+                pattern().remove_pin(a.str("pin"));
+                return kv("pin", a.str("pin"));
+            });
+        });
+
+        method("pattern_save", "Write the edits to the current pattern's own .digipat", {}, [this](const Json&) {
+            return editing([&] {
+                tdc::Pattern& p = pattern();
+                if (!p.modified()) return kv("saved", p.path);
+                const std::string bytes = p.patched_bytes();
+                backup(p.path);
+                tdc::write_file(p.path, bytes);
+                p.commit(bytes);
+                p.mtime = tdc::file_mtime(p.path);
+                log("info", "已保存 " + p.file + ".digipat");
+                return kv("saved", p.path);
+            });
         });
 
         method("counts", "Editable repeat / set_loop counts of the current pattern (params widget rows)", {}, [this](const Json&) {
@@ -300,8 +449,8 @@ private:
             }
         });
 
-        method("revert", "Discard the count edits of the current pattern", {}, [this](const Json&) {
-            pattern().edits.clear();
+        method("revert", "Discard the unsaved edits of the current pattern", {}, [this](const Json&) {
+            pattern().reset();
             return summary();
         });
 
@@ -319,9 +468,15 @@ private:
                 throw PluginError(DM_E_BAD_ARGS, "文件名不能包含 \\ / : * ? \" < > |");
             const std::string path = tdc::path_join(tdc::parent_dir(p.path), name + ".digipat");
             if (tdc::file_exists(path)) throw PluginError(DM_E_BAD_ARGS, name + ".digipat 已存在");
-            tdc::write_file(path, p.patched_bytes());
+            std::string bytes;
+            try {
+                bytes = p.patched_bytes();
+            } catch (const std::invalid_argument& e) {
+                throw PluginError(DM_E_BAD_ARGS, e.what());
+            }
+            tdc::write_file(path, bytes);
             const std::string label = p.name;
-            p.edits.clear();
+            p.reset();
             project_->rescan();
             current_ = name;
             log("info", "已保存 " + name + ".digipat（起始标签仍为 " + label + "）");
@@ -480,11 +635,15 @@ private:
                     const std::string text = f(k);
                     std::string key = k;
                     for (auto& c : key) c = char(std::tolower(static_cast<unsigned char>(c)));
+                    row[k] = text;
                     try {
                         const double v = tdc::evaluate(text, sym);
                         row[key] = k[0] == 'I' ? tdc::fmt_g(v * 1e3, 6) + " mA" : tdc::fmt_g(v, 6) + " V";
                         for (auto& [s, _] : sym)
-                            if (text.find(s) != std::string::npos) { formulas += (formulas.empty() ? "" : "，") + std::string(k) + " = " + text; break; }
+                            if (text.find(s) != std::string::npos) {
+                                formulas += (formulas.empty() ? "" : "，") + std::string(k) + " = " + row[key].as_string();
+                                break;
+                            }
                     } catch (const std::exception&) {
                         row[key] = text;
                     }
@@ -493,6 +652,42 @@ private:
                 rows.push_back(row);
             }
             return Json{{"rows", rows}, {"file", tdc::base_name(project_->levels_path)}};
+        });
+
+        method("set_level", "Change a level of a pin or pin group in the levels sheet (field: Vil ... Vterm, TerminationMode)",
+               {"pin", "field", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string pin = a.str("pin"), field = a.str("field");
+                std::string value = tdc::trim(a.str("value"));
+                if (field == "TerminationMode") {
+                    if (value != "HighZ" && value != "ActiveLoad" && value != "Vterm")
+                        throw std::invalid_argument("端接应为 HighZ、ActiveLoad 或 Vterm");
+                } else {
+                    static const std::vector<std::string> fields{"Vil", "Vih", "Vol", "Voh", "Iol", "Ioh", "Vterm"};
+                    if (std::find(fields.begin(), fields.end(), field) == fields.end()) throw std::invalid_argument("未知字段 " + field);
+                    value = checked(value, field);
+                }
+                edit_sheet(project_->levels_path, [&](std::string& x) { tdc::levels_set(x, pin, field, value); });
+                log("info", "电平 " + pin + " " + field + " = " + value);
+                return Json{{"pin", pin}, {"field", field}, {"value", value}};
+            });
+        });
+
+        method("add_level", "Add levels for a pin or pin group, copied from the first row", {"pin"}, [this](const Json& a) {
+            return editing([&] {
+                if (project_->levels.empty()) throw std::invalid_argument("电平表是空的，没有可复制的电平");
+                const std::string pin = a.str("pin"), from = project_->levels.front().pin;
+                edit_sheet(project_->levels_path, [&](std::string& x) { tdc::levels_add(x, pin, from); });
+                return kv("pin", pin);
+            });
+        });
+
+        method("remove_level", "Remove the levels of a pin or pin group", {"pin"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string pin = a.str("pin");
+                edit_sheet(project_->levels_path, [&](std::string& x) { tdc::levels_remove(x, pin); });
+                return kv("pin", pin);
+            });
         });
 
         method("timesets", "Timesets of the timing sheets", {}, [this](const Json&) {
@@ -507,6 +702,110 @@ private:
                 rows.push_back(Json{{"name", name}, {"period", ts.period_text}, {"used_by", int(used.size())}, {"patterns", list}});
             }
             return kv("rows", rows);
+        });
+
+        method("timeset_options", "Timeset names for the selectors", {}, [this](const Json&) {
+            Json list = Json::array();
+            for (auto& [name, ts] : project_->timing) {
+                (void)ts;
+                list.push_back(Json{{"label", name}, {"value", name}});
+            }
+            return kv("timesets", list);
+        });
+
+        method("set_period", "Change the period of a timeset", {"name", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = a.str("name"), value = checked(a.str("value"), "周期", true);
+                edit_sheet(sheet_of(name), [&](std::string& x) { tdc::timing_set_period(x, name, value); });
+                log("info", "时序集 " + name + " 周期 = " + value);
+                return Json{{"name", name}, {"value", value}};
+            });
+        });
+
+        method("add_timeset", "Add a timeset, a copy of copy_of in the same timing sheet", {"name", "copy_of"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = tdc::trim(a.str("name")), from = a.str("copy_of");
+                if (!tdc::valid_name(name)) throw std::invalid_argument("时序集名 '" + name + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+                if (project_->timing_file.count(name)) throw std::invalid_argument("已有时序集 " + name);
+                edit_sheet(sheet_of(from), [&](std::string& x) { tdc::timing_add_timeset(x, name, from); });
+                log("info", "新建时序集 " + name + "（复制自 " + from + "）");
+                return kv("name", name);
+            });
+        });
+
+        method("remove_timeset", "Delete a timeset no pattern uses", {"name"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = a.str("name");
+                for (auto& p : project_->patterns)
+                    if (std::find(p->timesets.begin(), p->timesets.end(), name) != p->timesets.end())
+                        throw std::invalid_argument("图形 " + p->file + " 还在用时序集 " + name);
+                edit_sheet(sheet_of(name), [&](std::string& x) { tdc::timing_remove_timeset(x, name); });
+                return kv("name", name);
+            });
+        });
+
+        method("set_edge", "Change a pin's entry in a timeset (field: format, On, Data, Return, Off, Strobe)",
+               {"timeset", "pin", "field", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string ts = a.str("timeset"), pin = a.str("pin"), field = a.str("field");
+                std::string value = tdc::trim(a.str("value"));
+                if (field == "format") {
+                    const std::string fmt = value.substr(0, value.find(' '));   // "RL 归零到低" or "RL"
+                    const tdc::TimingModel tm = model();
+                    auto m = tm.find(ts);
+                    const double half = m != tm.end() && m->second.period > 0 ? m->second.period / 2 : 1e-6;
+                    edit_sheet(sheet_of(ts), [&](std::string& x) { tdc::timing_set_format(x, ts, pin, fmt, tdc::fmt_g(half * 1e9, 6) + " ns"); });
+                } else {
+                    value = checked(value, field);
+                    edit_sheet(sheet_of(ts), [&](std::string& x) { tdc::timing_set_edge(x, ts, pin, field, value); });
+                }
+                log("info", "时序集 " + ts + " " + pin + " " + field + " = " + value);
+                return Json{{"timeset", ts}, {"pin", pin}, {"field", field}, {"value", value}};
+            });
+        });
+
+        method("add_edge", "Add an entry for a pin or group to a timeset, a copy of what it uses now", {"timeset", "pin"},
+               [this](const Json& a) {
+            return editing([&] {
+                const std::string name = a.str("timeset"), pin = a.str("pin");
+                std::string from;
+                for (auto& [ts_name, ts] : project_->timing) {
+                    if (ts_name != name) continue;
+                    for (auto& pe : ts.edges) {
+                        const auto covered = project_->expand(pe.pin);
+                        if (from.empty() || std::find(covered.begin(), covered.end(), pin) != covered.end()) from = pe.pin;
+                    }
+                }
+                edit_sheet(sheet_of(name), [&](std::string& x) { tdc::timing_add_pin(x, name, pin, from); });
+                return Json{{"timeset", name}, {"pin", pin}};
+            });
+        });
+
+        method("remove_edge", "Remove a pin's entry from a timeset", {"timeset", "pin"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string name = a.str("timeset"), pin = a.str("pin");
+                edit_sheet(sheet_of(name), [&](std::string& x) { tdc::timing_remove_pin(x, name, pin); });
+                return Json{{"timeset", name}, {"pin", pin}};
+            });
+        });
+
+        method("restore_sheets", "Put back the project files as they were before the first edit", {}, [this](const Json&) {
+            return editing([&] {
+                const std::string root = tdc::path_join(work_, "backup");
+                int restored = 0;
+                for (const char* ext : {".pinmap", ".digilevels", ".digitiming", ".digipat"}) {
+                    for (auto& path : tdc::find_files(root, ext)) {
+                        tdc::write_file(tdc::path_join(project_->folder, path.substr(root.size() + 1)), tdc::read_file(path));
+                        std::remove(path.c_str());
+                        ++restored;
+                    }
+                }
+                project_->reload_sheets();
+                instrument_ready_ = false;
+                ++sheet_rev_;
+                log("info", "已还原 " + std::to_string(restored) + " 个工程文件");
+                return kv("restored", restored);
+            });
         });
 
         method("timeset_edges", "Drive format and edges of every pin in each timeset, as in the editor's timing sheet "
@@ -541,10 +840,13 @@ private:
                     for (auto& [pin, msg] : m.problems)
                         if (pin == pe.pin) problems += (problems.empty() ? "" : "；") + msg;
                     const bool pulsed = e.format != "NR";
+                    auto raw = [&pe](const char* k) { auto it = pe.edges.find(k); return it != pe.edges.end() ? it->second : std::string(); };
                     rows.push_back(Json{{"timeset", name}, {"period", tdc::fmt_time(m.period > 0 ? m.period : NaN)},
-                                        {"pin", pe.pin}, {"format", tdc::format_name(pe.format)},
+                                        {"pin", pe.pin}, {"format", tdc::format_name(pe.format)}, {"fmt", pe.format},
                                         {"on", edge(e.on)}, {"data", edge(e.data)}, {"return", pulsed ? edge(e.ret) : "\xE2\x80\x94"},
                                         {"off", edge(e.off)}, {"strobe", edge(e.strobe)},
+                                        {"On", raw("On")}, {"Data", raw("Data")}, {"Return", raw("Return")},
+                                        {"Off", raw("Off")}, {"Strobe", raw("Strobe")}, {"no_return", !pulsed},
                                         {"note", problems.empty() ? pe.comment : (pe.comment.empty() ? "" : pe.comment + "；") + "⚠ " + problems},
                                         {"sheet", tdc::base_name(m.sheet)}});
                 }
@@ -575,7 +877,110 @@ private:
                                     {"channel", c != pm.connections.end() ? Json(c->second.channel) : Json("—")},
                                     {"groups", groups}, {"patterns", used}});
             }
+            Json instruments = Json::array();
+            for (auto& name : pm.instruments) instruments.push_back(name);
+            return Json{{"rows", rows}, {"instruments", instruments}};
+        });
+
+        method("instruments", "Instruments of the pin map", {}, [this](const Json&) {
+            const auto& pm = project_->pinmap;
+            Json rows = Json::array();
+            for (auto& name : pm.instruments) {
+                int used = 0;
+                for (auto& [pin, c] : pm.connections) {
+                    (void)pin;
+                    if (c.instrument == name) ++used;
+                }
+                auto ch = pm.channels.find(name);
+                rows.push_back(Json{{"instrument", name}, {"name", name}, {"channels", ch != pm.channels.end() ? ch->second : 0}, {"pins", used}});
+            }
             return kv("rows", rows);
+        });
+
+        method("rename_instrument", "Rename an instrument of the pin map (it must match the resource name on the real system)",
+               {"instrument", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string from = a.str("instrument"), to = tdc::trim(a.str("value"));
+                if (to.empty()) throw std::invalid_argument("仪器名不能为空");
+                const auto& list = project_->pinmap.instruments;
+                if (std::find(list.begin(), list.end(), to) != list.end()) throw std::invalid_argument("已有仪器 " + to);
+                edit_sheet(project_->pinmap_path, [&](std::string& x) { tdc::pinmap_rename_instrument(x, from, to); });
+                return kv("name", to);
+            });
+        });
+
+        method("set_pin", "Change a pin of the pin map (field: instrument, channel, groups; groups are comma separated)",
+               {"pin", "field", "value"}, [this](const Json& a) {
+            return editing([&] {
+                const auto& pm = project_->pinmap;
+                const std::string pin = a.str("pin"), field = a.str("field"), value = tdc::trim(a.str("value"));
+                if (std::find(pm.pins.begin(), pm.pins.end(), pin) == pm.pins.end()) throw std::invalid_argument("没有引脚 " + pin);
+                if (field == "groups") {
+                    std::string list = value;
+                    const std::string wide = "\xEF\xBC\x8C";               // full-width comma
+                    for (size_t at = list.find(wide); at != std::string::npos; at = list.find(wide)) list.replace(at, wide.size(), ",");
+                    std::vector<std::string> groups;
+                    for (size_t b = 0; b <= list.size();) {
+                        const size_t e = std::min(list.find(',', b), list.size());
+                        const std::string g = tdc::trim(list.substr(b, e - b));
+                        if (!g.empty() && !tdc::valid_name(g)) throw std::invalid_argument("分组名 '" + g + "' 无效");
+                        if (!g.empty()) groups.push_back(g);
+                        b = e + 1;
+                    }
+                    edit_sheet(project_->pinmap_path, [&](std::string& x) { tdc::pinmap_set_groups(x, pin, groups); });
+                    return Json{{"pin", pin}, {"field", field}};
+                }
+                auto c = pm.connections.find(pin);
+                std::string instrument = c != pm.connections.end() ? c->second.instrument : pm.instruments.empty() ? std::string() : pm.instruments.front();
+                int channel = c != pm.connections.end() ? c->second.channel : -1;
+                if (field == "instrument") {
+                    instrument = value;
+                    if (std::find(pm.instruments.begin(), pm.instruments.end(), instrument) == pm.instruments.end())
+                        throw std::invalid_argument("没有仪器 " + instrument);
+                } else if (field == "channel") {
+                    char* end = nullptr;
+                    const long n = std::strtol(value.c_str(), &end, 10);
+                    auto total = pm.channels.find(instrument);
+                    const int limit = total != pm.channels.end() && total->second > 0 ? total->second : 1 << 16;
+                    if (value.empty() || *end || n < 0 || n >= limit)
+                        throw std::invalid_argument("通道应在 0 … " + std::to_string(limit - 1));
+                    channel = int(n);
+                } else {
+                    throw std::invalid_argument("未知字段 " + field);
+                }
+                if (channel < 0) throw std::invalid_argument("先填通道号");
+                for (auto& [other, conn] : pm.connections)
+                    if (other != pin && conn.instrument == instrument && conn.channel == channel)
+                        throw std::invalid_argument(instrument + " 的通道 " + std::to_string(channel) + " 已接引脚 " + other);
+                edit_sheet(project_->pinmap_path, [&](std::string& x) { tdc::pinmap_set_connection(x, pin, instrument, channel); });
+                log("info", "引脚 " + pin + " 接到 " + instrument + " 通道 " + std::to_string(channel));
+                return Json{{"pin", pin}, {"field", field}};
+            });
+        });
+
+        method("add_pin", "Add a pin to the pin map; connect it by setting its channel", {"name"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string pin = tdc::trim(a.str("name"));
+                if (!tdc::valid_name(pin)) throw std::invalid_argument("引脚名 '" + pin + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+                edit_sheet(project_->pinmap_path, [&](std::string& x) { tdc::pinmap_add_pin(x, pin); });
+                return kv("pin", pin);
+            });
+        });
+
+        method("remove_pin", "Remove a pin no pattern, timeset or level uses", {"pin"}, [this](const Json& a) {
+            return editing([&] {
+                const std::string pin = a.str("pin");
+                for (auto& p : project_->patterns)
+                    if (std::find(p->pins.begin(), p->pins.end(), pin) != p->pins.end())
+                        throw std::invalid_argument("图形 " + p->file + " 还在用引脚 " + pin);
+                for (auto& lv : project_->levels)
+                    if (lv.pin == pin) throw std::invalid_argument("电平表里还有 " + pin + "，先删除它的电平");
+                for (auto& [name, ts] : project_->timing)
+                    for (auto& pe : ts.edges)
+                        if (pe.pin == pin) throw std::invalid_argument("时序集 " + name + " 里还有 " + pin + "，先删除它的边沿");
+                edit_sheet(project_->pinmap_path, [&](std::string& x) { tdc::pinmap_remove_pin(x, pin); });
+                return kv("pin", pin);
+            });
         });
 
         method("sim_set_busy", "[sim] TDC conversion time before BUSY rises again", {"us"}, [this](const Json& a) {
@@ -584,10 +989,15 @@ private:
         });
 
         // ---- generator ----
-        method("pin_options", "Pins of the pin map for the generator's selectors", {"optional"}, [this](const Json& a) {
+        method("pin_options", "Pins of the pin map for the selectors (groups=true: pin groups too)", {"optional", "groups"}, [this](const Json& a) {
             Json list = Json::array();
             if (a.boolean("optional", false)) list.push_back(Json{{"label", "（不用）"}, {"value", ""}});
             for (auto& p : project_->pinmap.pins) list.push_back(Json{{"label", p}, {"value", p}});
+            if (a.boolean("groups", false))
+                for (auto& [g, pins] : project_->pinmap.groups) {
+                    (void)pins;
+                    list.push_back(Json{{"label", g + "（组）"}, {"value", g}});
+                }
             return kv("pins", list);
         });
 
@@ -839,6 +1249,7 @@ private:
     std::unique_ptr<tdc::Project> project_;
     double busy_delay_ = 120e-6;
     bool simulate_ = true, instrument_ready_ = false, manual_trigger_ = false;
+    unsigned sheet_rev_ = 0;                       // bumped when a sheet on disk changes
     std::map<std::string, std::string> spec_values_;
     std::map<std::string, Json> cache_;
     Json gen_last_ = Json::object();

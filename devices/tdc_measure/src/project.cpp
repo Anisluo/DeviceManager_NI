@@ -31,6 +31,8 @@ char state_char(unsigned code)
     }
 }
 
+constexpr char STATE_CHARS[] = "01LHXMVDE";
+
 std::string lower(std::string s)
 {
     for (auto& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
@@ -59,6 +61,15 @@ Decoded decode(uint32_t ins)
     return Decoded{(ins >> 28) & 0xFu, (ins >> 23) & 0x1Fu, (ins >> 16) & 0x7Fu, ins & 0xFFFFu};
 }
 
+unsigned state_code(char c)
+{
+    switch (c) {
+    case '0': return 0; case '1': return 1; case 'L': return 3; case 'H': return 4;
+    case 'M': return 6; case 'V': return 7; case 'D': return 8; case 'E': return 9;
+    default: return 5;                                   // X
+    }
+}
+
 std::string op_name(unsigned op)
 {
     switch (op) {
@@ -78,8 +89,10 @@ Pinmap load_pinmap(const std::string& path)
 {
     Pinmap pm;
     xml_parse(read_file(path)).walk([&pm](const XmlNode& n) {
-        if (n.tag == "NIDigitalPatternInstrument") pm.instruments.push_back(n.attr("name"));
-        else if (n.tag == "DUTPin") pm.pins.push_back(n.attr("name"));
+        if (n.tag == "NIDigitalPatternInstrument") {
+            pm.instruments.push_back(n.attr("name"));
+            pm.channels[n.attr("name")] = std::atoi(n.attr("numberOfChannels", "0").c_str());
+        } else if (n.tag == "DUTPin") pm.pins.push_back(n.attr("name"));
         else if (n.tag == "PinGroup") {
             std::vector<std::string> pins;
             for (auto& c : n.children) if (c.tag == "PinReference") pins.push_back(c.attr("pin"));
@@ -202,6 +215,21 @@ Pattern::Pattern(const std::string& p) : path(p)
 {
     file = stem(p);
     data = read_file(p);
+    load();
+    mtime = file_mtime(p);
+    const std::string side = path_join(parent_dir(p), file + ".tdcgen.json");
+    if (file_exists(side)) {
+        try {
+            meta = dm::Json::parse(read_file(side));
+        } catch (const std::exception&) {
+            meta = dm::Json();
+        }
+    }
+    generated = meta.is_object() && meta.size() > 0;
+}
+
+void Pattern::load()
+{
     tdms = tdms::read(data);
     const tdms::Prop* np = tdms::find_prop(tdms.props, "name");
     name = np && !np->str.empty() ? np->str : file;
@@ -215,14 +243,19 @@ Pattern::Pattern(const std::string& p) : path(p)
     };
     pins = strs("PinItem", "PinName");
     timesets = strs("TimeSet", "Name");
+    base_ins.clear();
     for (double v : nums("Pattern", "Instruction")) base_ins.push_back(uint32_t(v));
     comments = strs("Pattern", "Comment");
     label_names = strs("Pattern", "LocalLabelName");
+    label_locs.clear();
     for (double v : nums("Pattern", "LocalLabelLocation")) label_locs.push_back(int(v));
+    export_locs.clear();
+    for (double v : nums("Pattern", "ExportLabelLocation")) export_locs.push_back(int(v));
     const size_t n = base_ins.size();
     comments.resize(std::max(comments.size(), n));
     const std::vector<double> raw = nums("Pattern", "PinState");
     const size_t width = (pins.size() + 1) / 2;
+    states.clear();
     for (size_t i = 0; i < n; ++i) {
         std::string s;
         for (size_t k = 0; k < pins.size(); ++k) {
@@ -232,16 +265,259 @@ Pattern::Pattern(const std::string& p) : path(p)
         }
         states.push_back(s);
     }
-    mtime = file_mtime(p);
-    const std::string side = path_join(parent_dir(p), file + ".tdcgen.json");
-    if (file_exists(side)) {
-        try {
-            meta = dm::Json::parse(read_file(side));
-        } catch (const std::exception&) {
-            meta = dm::Json();
+}
+
+void Pattern::begin_edit()
+{
+    base_ins = ins();
+    edits.clear();
+    structural = true;
+    ++revision;
+}
+
+size_t Pattern::pin_index(const std::string& pin) const
+{
+    const auto it = std::find(pins.begin(), pins.end(), pin);
+    if (it == pins.end()) throw std::invalid_argument("图形里没有引脚 " + pin);
+    return size_t(it - pins.begin());
+}
+
+size_t Pattern::label_index(const std::string& label) const
+{
+    const auto it = std::find(label_names.begin(), label_names.end(), label);
+    if (it == label_names.end()) throw std::invalid_argument("没有标签 " + label);
+    return size_t(it - label_names.begin());
+}
+
+bool Pattern::label_referenced(size_t label) const
+{
+    for (uint32_t v : ins()) {
+        const Decoded d = decode(v);
+        if ((d.op == 5 || d.op == 7) && (d.operand & 0x7FFF) == label) return true;
+    }
+    return false;
+}
+
+void Pattern::set_state(size_t v, const std::string& pin, const std::string& state)
+{
+    const size_t k = pin_index(pin);
+    if (v >= states.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    if (state.size() != 1 || std::string(STATE_CHARS).find(state[0]) == std::string::npos)
+        throw std::invalid_argument("引脚状态 '" + state + "' 无效，可用 0 1 L H X M V D E");
+    begin_edit();
+    states[v][k] = state[0];
+}
+
+void Pattern::set_instruction(size_t v, const std::string& raw)
+{
+    if (v >= base_ins.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    const Decoded old = decode(ins()[v]);
+    std::string text = trim(raw);
+    unsigned flags = 0, op = 0, operand = 0;
+    auto hex_of = [&raw](const std::string& s) {
+        char* end = nullptr;
+        const unsigned long n = std::strtoul(s.c_str(), &end, 16);
+        if (s.empty() || *end || n > 0x7F) throw std::invalid_argument("指令 '" + raw + "' 的标志无效");
+        return unsigned(n);
+    };
+    const size_t fl = text.find('[');
+    if (fl != std::string::npos) {
+        const size_t x0 = text.find("0x", fl), x1 = text.find(']', fl);
+        if (x0 == std::string::npos || x1 == std::string::npos) throw std::invalid_argument("指令 '" + raw + "' 的标志无效");
+        flags = hex_of(text.substr(x0 + 2, x1 - x0 - 2));
+        text = trim(text.substr(0, fl));
+    }
+    const size_t lp = text.find('('), rp = text.rfind(')');
+    if (lp != std::string::npos && (rp == std::string::npos || rp < lp)) throw std::invalid_argument("指令 '" + raw + "' 缺少右括号");
+    const std::string name = text.substr(0, lp), arg = lp == std::string::npos ? "" : trim(text.substr(lp + 1, rp - lp - 1));
+    if (name == "repeat" || name == "set_loop") {
+        char* end = nullptr;
+        const long n = std::strtol(arg.c_str(), &end, 10);
+        if (arg.empty() || *end || n < 1 || n > COUNT_MAX) throw std::invalid_argument(name + " 的次数应在 1 … " + std::to_string(COUNT_MAX));
+        op = name == "repeat" ? 1 : 4;
+        operand = unsigned(n);
+    } else if (name == "end_loop") {
+        op = 5;
+        operand = unsigned(label_index(arg));
+    } else if (name == "jump_if") {
+        const size_t comma = arg.find(',');
+        if (comma == std::string::npos) throw std::invalid_argument("jump_if 的写法是 jump_if(0x28!, 标签)");
+        std::string cond = trim(arg.substr(0, comma));
+        const bool negate = !cond.empty() && cond.back() == '!';
+        if (negate) cond.pop_back();
+        if (cond.rfind("0x", 0) != 0) throw std::invalid_argument("jump_if 的写法是 jump_if(0x28!, 标签)");
+        op = 7;
+        flags = hex_of(cond.substr(2));
+        operand = unsigned(label_index(trim(arg.substr(comma + 1)))) | (negate ? 0x8000u : 0u);
+    } else if (name == "halt") {
+        op = 15;
+        operand = old.op == 15 ? old.operand : 0xF;
+    } else if (name.size() == 3 && name.rfind("op", 0) == 0 && arg.rfind("0x", 0) == 0) {      // as shown for unknown opcodes
+        char* end = nullptr;
+        op = unsigned(std::strtoul(name.substr(2).c_str(), &end, 16));
+        operand = unsigned(std::strtoul(arg.c_str() + 2, nullptr, 16)) & 0xFFFFu;
+    } else if (!name.empty()) {
+        throw std::invalid_argument("不认识的指令 '" + raw + "'，可用 repeat(n)、set_loop(n)、end_loop(标签)、jump_if(0x28!, 标签)、halt");
+    }
+    begin_edit();
+    base_ins[v] = (uint32_t(op) << 28) | (uint32_t(old.timeset) << 23) | (uint32_t(flags) << 16) | operand;
+}
+
+void Pattern::set_timeset(size_t v, const std::string& name)
+{
+    if (v >= base_ins.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    const auto it = std::find(timesets.begin(), timesets.end(), name);
+    const size_t k = size_t(it - timesets.begin());
+    if (k > 0x1F) throw std::invalid_argument("一个图形最多用 32 个时序集");
+    begin_edit();
+    if (it == timesets.end()) timesets.push_back(name);
+    base_ins[v] = (base_ins[v] & ~(uint32_t(0x1F) << 23)) | (uint32_t(k) << 23);
+}
+
+void Pattern::set_label(size_t v, const std::string& raw)
+{
+    if (v >= base_ins.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    const std::string label = trim(raw);
+    size_t k = label_names.size();
+    for (size_t i = 0; i < label_names.size() && i < label_locs.size(); ++i)
+        if (size_t(label_locs[i]) == v) { k = i; break; }
+    const bool has = k < label_names.size();
+    if (has && label_names[k] == label) return;
+    if (label.empty()) {
+        if (!has) return;
+        if (label_names[k] == name) throw std::invalid_argument("起始标签 " + name + " 不能删除，可以改名");
+        if (label_referenced(k)) throw std::invalid_argument("标签 " + label_names[k] + " 还被指令引用，不能删除");
+        begin_edit();
+        label_names.erase(label_names.begin() + long(k));
+        label_locs.erase(label_locs.begin() + long(k));
+        for (auto& in : base_ins) {                          // labels are referenced by index
+            const Decoded d = decode(in);
+            if ((d.op == 5 || d.op == 7) && (d.operand & 0x7FFF) > k) --in;
+        }
+        return;
+    }
+    if (!valid_name(label)) throw std::invalid_argument("标签 '" + label + "' 无效：只能用字母、数字和下划线，且不能以数字开头");
+    if (std::find(label_names.begin(), label_names.end(), label) != label_names.end())
+        throw std::invalid_argument("已有标签 " + label);
+    begin_edit();
+    if (!has) {
+        label_names.push_back(label);
+        label_locs.push_back(int(v));
+        return;
+    }
+    if (label_names[k] == name) name = label;
+    label_names[k] = label;
+}
+
+void Pattern::set_comment(size_t v, const std::string& text)
+{
+    if (v >= comments.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    begin_edit();
+    comments[v] = text;
+}
+
+void Pattern::insert_vector(size_t after)
+{
+    if (after >= base_ins.size()) throw std::invalid_argument("向量 " + std::to_string(after) + " 超出范围");
+    begin_edit();
+    const uint32_t plain = base_ins[after] & (uint32_t(0x1F) << 23);        // same timeset, no instruction
+    base_ins.insert(base_ins.begin() + long(after) + 1, plain);
+    states.insert(states.begin() + long(after) + 1, states[after]);
+    comments.insert(comments.begin() + long(after) + 1, std::string());
+    for (auto* locs : {&label_locs, &export_locs})
+        for (auto& at : *locs) if (size_t(at) > after) ++at;
+}
+
+void Pattern::remove_vector(size_t v)
+{
+    if (v >= base_ins.size()) throw std::invalid_argument("向量 " + std::to_string(v) + " 超出范围");
+    if (base_ins.size() == 1) throw std::invalid_argument("图形至少要有一个向量");
+    if (v + 1 == base_ins.size()) {
+        for (auto* locs : {&label_locs, &export_locs})
+            for (int at : *locs) if (size_t(at) == v) throw std::invalid_argument("最后一个向量上有标签，先删除标签");
+    }
+    begin_edit();
+    base_ins.erase(base_ins.begin() + long(v));
+    states.erase(states.begin() + long(v));
+    comments.erase(comments.begin() + long(v));
+    // a label on the removed vector moves to the next one
+    for (auto* locs : {&label_locs, &export_locs})
+        for (auto& at : *locs) if (size_t(at) > v) --at;
+}
+
+void Pattern::add_pin(const std::string& pin)
+{
+    if (std::find(pins.begin(), pins.end(), pin) != pins.end()) throw std::invalid_argument("图形里已有引脚 " + pin);
+    begin_edit();
+    pins.push_back(pin);
+    for (auto& s : states) s += 'X';
+    if (tdms::Channel* c = tdms.channel("PinItem", "PinNameGroupIndex")) c->nums.push_back(-1);
+}
+
+void Pattern::remove_pin(const std::string& pin)
+{
+    const size_t k = pin_index(pin);
+    if (pins.size() == 1) throw std::invalid_argument("图形至少要有一个引脚");
+    begin_edit();
+    pins.erase(pins.begin() + long(k));
+    for (auto& s : states) s.erase(k, 1);
+    if (tdms::Channel* c = tdms.channel("PinItem", "PinNameGroupIndex"))
+        if (k < c->nums.size()) c->nums.erase(c->nums.begin() + long(k));
+}
+
+void Pattern::reset()
+{
+    edits.clear();
+    structural = false;
+    load();
+    ++revision;
+}
+
+void Pattern::commit(const std::string& bytes)
+{
+    data = bytes;
+    reset();
+}
+
+std::string Pattern::rebuilt_bytes() const
+{
+    tdms::File f = tdms;
+    auto setc = [&f](const char* g, const char* c) -> tdms::Channel& {
+        tdms::Channel* ch = f.channel(g, c);
+        if (!ch) throw std::invalid_argument(std::string("图形文件缺少 ") + g + "/" + c);
+        ch->nums.clear();
+        ch->strs.clear();
+        return *ch;
+    };
+    const std::vector<uint32_t> in = ins();
+    const size_t width = (pins.size() + 1) / 2;
+    std::vector<double> packed(in.size() * width, 0.0);
+    for (size_t i = 0; i < in.size(); ++i) {
+        for (size_t k = 0; k < pins.size(); ++k) {
+            if (states[i][k] == '?') throw std::invalid_argument("向量 " + std::to_string(i) + " 有无法解码的引脚状态，不能保存");
+            double& byte = packed[i * width + k / 2];
+            byte = double(unsigned(byte) | (state_code(states[i][k]) << (4 * (k % 2))));
         }
     }
-    generated = meta.is_object() && meta.size() > 0;
+    tdms::set_prop(f.props, "name", name);
+    setc("TimeSet", "Name").strs = timesets;
+    setc("PinItem", "PinName").strs = pins;
+    auto& instructions = setc("Pattern", "Instruction");
+    for (uint32_t v : in) instructions.nums.push_back(double(v));
+    setc("Pattern", "PinState").nums = std::move(packed);
+    std::vector<std::string> comment_list(comments.begin(), comments.begin() + long(in.size()));
+    setc("Pattern", "Comment").strs = std::move(comment_list);
+    setc("Pattern", "LocalLabelName").strs = label_names;
+    auto& locs = setc("Pattern", "LocalLabelLocation");
+    auto& refd = setc("Pattern", "LocalLabelReferenced");
+    for (size_t k = 0; k < label_locs.size(); ++k) {
+        locs.nums.push_back(double(label_locs[k]));
+        refd.nums.push_back(label_referenced(k) ? 1.0 : 0.0);
+    }
+    auto& exports = setc("Pattern", "ExportLabelLocation");
+    for (int at : export_locs) exports.nums.push_back(double(at));
+    tdms::set_prop(f.group("Pattern")->props, "VectorCount", double(in.size()));
+    return tdms::write(f);
 }
 
 std::vector<uint32_t> Pattern::ins() const
@@ -254,6 +530,7 @@ std::vector<uint32_t> Pattern::ins() const
 
 bool Pattern::modified() const
 {
+    if (structural) return true;
     for (auto& [i, v] : edits)
         if (i < base_ins.size() && decode(base_ins[i]).operand != unsigned(v)) return true;
     return false;
@@ -326,6 +603,7 @@ std::pair<int, bool> Pattern::set_count(size_t i, long long value)
 
 std::string Pattern::patched_bytes() const
 {
+    if (structural) return rebuilt_bytes();
     std::string out = data;
     const std::vector<uint32_t> v = ins();
     for (auto& [i, _] : edits) out = tdms::patch_u32(out, tdms, "Pattern", "Instruction", i, v[i]);
@@ -771,8 +1049,13 @@ Project::Project(const std::string& f, std::vector<std::string> extra) : folder(
     levels_path = first(".digilevels");
     timing_path = first(".digitiming");
     if (pinmap_path.empty()) throw std::runtime_error(folder + "：没有 .pinmap");
-    pinmap = load_pinmap(pinmap_path);
     if (!specs_path.empty()) specs = load_specs(specs_path);
+    reload_sheets();
+}
+
+void Project::reload_sheets()
+{
+    pinmap = load_pinmap(pinmap_path);
     if (!levels_path.empty()) levels = load_levels(levels_path);
     rescan();
 }
@@ -910,6 +1193,10 @@ std::vector<std::string> check(const Pattern& p, const Project& pr, const Timing
         if (!pr.levels_path.empty() && !leveled.count(pin))
             out.push_back("引脚 " + pin + " 在电平表 " + stem(pr.levels_path) + " 里没有电平，运行时沿用仪器当前电平");
     }
+    const std::vector<uint32_t> in = p.ins();
+    for (size_t i = 0; i < in.size(); ++i)
+        if (decode(in[i]).op == 4 && p.loop_end(i) < 0) out.push_back("v" + std::to_string(i) + "：set_loop 没有对应的 end_loop");
+    if (!in.empty() && decode(in.back()).op != 15) out.push_back("图形最后一个向量不是 halt");
     for (auto& name : p.used_timesets()) {
         auto it = tm.find(name);
         if (it == tm.end()) continue;                       // run() already notes unknown timesets

@@ -40,6 +40,7 @@ struct Decoded {
 };
 Decoded decode(uint32_t ins);
 std::string op_name(unsigned op);
+unsigned state_code(char c);               // '0' -> 0, 'L' -> 3, ...; X for anything else
 
 // One <PinEdge> of a timing sheet, as written.
 struct PinEdge {
@@ -84,6 +85,7 @@ struct Connection {
 
 struct Pinmap {
     std::vector<std::string> instruments;
+    std::map<std::string, int> channels;   // instrument -> numberOfChannels
     std::vector<std::string> pins;
     std::vector<std::pair<std::string, std::vector<std::string>>> groups;
     std::map<std::string, Connection> connections;
@@ -121,8 +123,15 @@ public:
     explicit Pattern(const std::string& path);
 
     std::string path, file, name;            // name = burst start label
+private:
+    void load();                             // decode `data`
+    void begin_edit();                       // folds the count edits into the vector table
+    size_t pin_index(const std::string& pin) const;
+    size_t label_index(const std::string& label) const;
+    std::string rebuilt_bytes() const;
+public:
     std::vector<std::string> pins, timesets, comments, label_names, states;
-    std::vector<int> label_locs;
+    std::vector<int> label_locs, export_locs;
     std::vector<uint32_t> base_ins;
     std::map<size_t, int> edits;             // vector index -> new operand
     double mtime = 0;
@@ -130,6 +139,25 @@ public:
     bool generated = false;
     std::string data;
     tdms::File tdms;
+    bool structural = false;                 // the vector table was edited; bytes must be rebuilt
+    unsigned revision = 0;                   // bumped by every edit
+
+    // Vector table editing. Works on the fields above until commit(); invalid input throws
+    // std::invalid_argument and changes nothing. Labels are referenced by index, so inserting and
+    // deleting vectors leaves end_loop / jump_if targets intact.
+    void set_state(size_t v, const std::string& pin, const std::string& state);
+    // Same text as instruction_text(): "", repeat(n), set_loop(n), end_loop(label),
+    // jump_if(0x28!, label), halt, plus an optional "[flags 0x20]".
+    void set_instruction(size_t v, const std::string& text);
+    void set_timeset(size_t v, const std::string& name);
+    void set_label(size_t v, const std::string& name);       // empty: remove an unreferenced label
+    void set_comment(size_t v, const std::string& text);
+    void insert_vector(size_t after);                        // copy of the vector's pin states, no instruction
+    void remove_vector(size_t v);
+    void add_pin(const std::string& pin);                    // new column of X
+    void remove_pin(const std::string& pin);
+    void reset();                                            // discard every edit
+    void commit(const std::string& bytes);                   // `bytes` are the file now
 
     std::vector<uint32_t> ins() const;
     bool modified() const;
@@ -142,6 +170,7 @@ public:
     std::pair<int, bool> set_count(size_t i, long long value);
     std::string patched_bytes() const;
     std::vector<std::string> used_timesets() const;          // referenced by instructions
+    bool label_referenced(size_t label) const;
     RunResult run(const TimingModel& tm, double busy_delay, std::mt19937* rng = nullptr,
                   double record_limit = 20e-3, long max_steps = 400000) const;
 };
@@ -169,6 +198,7 @@ public:
     std::map<std::string, std::string> timing_file;          // timeset -> .digitiming defining it
     std::vector<std::shared_ptr<Pattern>> patterns;          // sorted by name (case-insensitive)
 
+    void reload_sheets();                                    // pin map, levels and timing changed on disk
     void rescan();
     std::shared_ptr<Pattern> find(const std::string& name) const;
     std::vector<std::string> expand(const std::string& pin_or_group) const;

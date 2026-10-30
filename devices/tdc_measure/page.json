@@ -70,6 +70,11 @@
    "id": "chk",
    "method": "checks",
    "interval_ms": 2000
+  },
+  {
+   "id": "inst",
+   "method": "instruments",
+   "interval_ms": 5000
   }
  ],
  "tabs": [
@@ -1082,52 +1087,242 @@
    "title": "向量",
    "sections": [
     {
-     "title": "解码后的向量",
-     "span": 12,
+     "title": "图形",
+     "span": 4,
      "widgets": [
       {
+       "type": "combo",
+       "id": "vec_pat",
+       "label": "图形",
+       "options_from": {
+        "method": "list_patterns",
+        "field": "patterns"
+       },
+       "init": {
+        "method": "info",
+        "field": "current"
+       },
+       "action": {
+        "method": "select",
+        "args": {
+         "name": "$value"
+        }
+       }
+      },
+      {
        "type": "readout",
-       "label": "引脚",
+       "label": "向量数",
        "source": "vec",
-       "field": "pins",
+       "field": "vector_count",
        "digits": 5
       },
       {
-       "type": "table",
+       "type": "readout",
+       "label": "状态",
+       "source": "sum",
+       "field": "modified",
+       "states": {
+        "true": {
+         "text": "已修改，未保存",
+         "tone": "warning"
+        },
+        "false": {
+         "text": "与文件一致",
+         "tone": "ok"
+        }
+       }
+      }
+     ]
+    },
+    {
+     "title": "保存",
+     "subtitle": "修改先留在内存里，运行时用修改后的图形；保存才写入 .digipat",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "button",
+       "label": "保存到当前图形",
+       "style": "primary",
+       "action": {
+        "method": "pattern_save",
+        "args": {}
+       },
+       "refresh": [
+        "vec",
+        "sum",
+        "tl",
+        "cnt",
+        "chk",
+        "pedges"
+       ]
+      },
+      {
+       "type": "text",
+       "id": "vec_save_name",
+       "label": "另存为",
+       "value": "",
+       "placeholder": "留空自动命名",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "保存为新图形",
+       "style": "secondary",
+       "action": {
+        "method": "save_as",
+        "args": {
+         "name": "$form.vec_save_name"
+        }
+       },
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "撤销修改",
+       "style": "ghost",
+       "action": {
+        "method": "revert",
+        "args": {}
+       },
+       "refresh": [
+        "vec",
+        "sum",
+        "tl",
+        "cnt",
+        "chk",
+        "pedges"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "引脚列",
+     "subtitle": "新增的列全为 X；时序集和电平要包含这个引脚",
+     "span": 4,
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "vec_pin",
+       "label": "引脚",
+       "options_from": {
+        "method": "pin_options",
+        "args": {},
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加到图形",
+       "style": "secondary",
+       "action": {
+        "method": "pattern_add_pin",
+        "args": {
+         "pin": "$form.vec_pin"
+        }
+       },
+       "refresh": [
+        "vec",
+        "sum",
+        "tl",
+        "cnt",
+        "chk",
+        "pedges"
+       ]
+      },
+      {
+       "type": "button",
+       "label": "从图形移除",
+       "style": "ghost",
+       "action": {
+        "method": "pattern_remove_pin",
+        "args": {
+         "pin": "$form.vec_pin"
+        }
+       },
+       "refresh": [
+        "vec",
+        "sum",
+        "tl",
+        "cnt",
+        "chk",
+        "pedges"
+       ]
+      }
+     ]
+    },
+    {
+     "title": "向量表",
+     "subtitle": "点引脚格后按 0 1 L H X M V D E 输入并跳到下一行，方向键移动；指令写 repeat(5)、set_loop(3)、end_loop(标签)、jump_if(0x28!, 标签)、halt；回车生效",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "edit_table",
        "source": "vec",
        "rows_field": "rows",
+       "rev_field": "rev",
+       "key": [
+        "v"
+       ],
+       "write": "edit_vector",
+       "height": 620,
+       "also": [
+        "sum",
+        "tl",
+        "cnt",
+        "chk",
+        "pedges"
+       ],
+       "pin_columns": {
+        "field": "pin_list",
+        "states": "states",
+        "after": 2
+       },
        "columns": [
         {
          "field": "v",
-         "label": "#"
+         "label": "#",
+         "width": 48
         },
         {
          "field": "label",
-         "label": "标签"
-        },
-        {
-         "field": "states",
-         "label": "引脚状态"
+         "label": "标签",
+         "width": 150,
+         "editor": "text",
+         "mono": true
         },
         {
          "field": "instruction",
-         "label": "指令"
+         "label": "指令",
+         "width": 240,
+         "editor": "text",
+         "mono": true
         },
         {
          "field": "timeset",
-         "label": "时序"
+         "label": "时序集",
+         "width": 140,
+         "editor": "combo",
+         "options_field": "ts_options"
         },
         {
          "field": "period",
-         "label": "周期"
-        },
-        {
-         "field": "edited",
-         "label": "改"
+         "label": "周期",
+         "width": 80
         },
         {
          "field": "comment",
-         "label": "注释"
+         "label": "注释",
+         "editor": "text"
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "插入",
+         "method": "vector_insert"
+        },
+        {
+         "label": "删除",
+         "method": "vector_delete"
         }
        ]
       }
@@ -1201,138 +1396,336 @@
      "span": 6,
      "widgets": [
       {
-       "type": "table",
+       "type": "edit_table",
        "source": "ts",
        "rows_field": "rows",
+       "key": [
+        "name"
+       ],
+       "write": "set_period",
+       "height": 340,
+       "also": [
+        "edges",
+        "pedges",
+        "sum",
+        "tl",
+        "vec",
+        "chk"
+       ],
        "columns": [
         {
          "field": "name",
-         "label": "名称"
+         "label": "名称",
+         "width": 130
         },
         {
          "field": "period",
-         "label": "周期"
+         "label": "周期",
+         "width": 130,
+         "editor": "text"
         },
         {
          "field": "used_by",
-         "label": "图形数"
+         "label": "图形数",
+         "width": 64
         },
         {
          "field": "patterns",
          "label": "图形"
         }
+       ],
+       "row_actions": [
+        {
+         "label": "删除",
+         "method": "remove_timeset"
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "id": "new_ts",
+       "label": "新时序集",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "new_ts_from",
+       "label": "复制自",
+       "options_from": {
+        "method": "timeset_options",
+        "args": {},
+        "field": "timesets"
+       }
+      },
+      {
+       "type": "button",
+       "label": "新建时序集",
+       "style": "secondary",
+       "action": {
+        "method": "add_timeset",
+        "args": {
+         "name": "$form.new_ts",
+         "copy_of": "$form.new_ts_from"
+        }
+       },
+       "refresh": [
+        "ts",
+        "edges"
        ]
       }
-     ]
+     ],
+     "subtitle": "周期可写数值或规格公式（如 Time.period*2），回车写入时序表"
     },
     {
      "title": "时序集引脚边沿",
-     "subtitle": "同 Digital Pattern Editor 时序表：每个引脚 / 引脚组的驱动格式和周期内边沿（公式按当前规格求值）",
+     "subtitle": "每个引脚 / 引脚组的驱动格式和边沿，可写数值或规格公式；引脚自己的条目优先于引脚组；NR 没有 Return",
      "span": 12,
      "widgets": [
       {
-       "type": "table",
+       "type": "edit_table",
        "source": "edges",
        "rows_field": "rows",
+       "key": [
+        "timeset",
+        "pin"
+       ],
+       "write": "set_edge",
+       "height": 480,
+       "also": [
+        "pedges",
+        "sum",
+        "tl",
+        "chk"
+       ],
        "columns": [
         {
          "field": "timeset",
-         "label": "时序集"
+         "label": "时序集",
+         "width": 120
         },
         {
          "field": "period",
-         "label": "周期"
+         "label": "周期",
+         "width": 80
         },
         {
          "field": "pin",
-         "label": "引脚 / 组"
+         "label": "引脚 / 组",
+         "width": 90
         },
         {
-         "field": "format",
-         "label": "驱动格式"
+         "field": "fmt",
+         "name": "format",
+         "label": "驱动格式",
+         "width": 96,
+         "editor": "combo",
+         "options": [
+          "NR",
+          "RL",
+          "RH",
+          "SBC"
+         ]
         },
         {
-         "field": "on",
-         "label": "On"
+         "field": "On",
+         "label": "On",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "data",
-         "label": "Data"
+         "field": "Data",
+         "label": "Data",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "return",
-         "label": "Return"
+         "field": "Return",
+         "label": "Return",
+         "width": 110,
+         "editor": "text",
+         "readonly_if": "no_return"
         },
         {
-         "field": "off",
-         "label": "Off"
+         "field": "Off",
+         "label": "Off",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "strobe",
-         "label": "Strobe"
+         "field": "Strobe",
+         "label": "Strobe",
+         "width": 110,
+         "editor": "text"
         },
         {
          "field": "note",
          "label": "备注"
-        },
-        {
-         "field": "sheet",
-         "label": "时序表"
         }
+       ],
+       "row_actions": [
+        {
+         "label": "删除",
+         "method": "remove_edge"
+        }
+       ]
+      },
+      {
+       "type": "combo",
+       "id": "edge_ts",
+       "label": "时序集",
+       "options_from": {
+        "method": "timeset_options",
+        "args": {},
+        "field": "timesets"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "edge_pin",
+       "label": "引脚 / 组",
+       "options_from": {
+        "method": "pin_options",
+        "args": {
+         "groups": true
+        },
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加引脚条目",
+       "style": "secondary",
+       "action": {
+        "method": "add_edge",
+        "args": {
+         "timeset": "$form.edge_ts",
+         "pin": "$form.edge_pin"
+        }
+       },
+       "refresh": [
+        "edges",
+        "pedges",
+        "chk"
        ]
       }
      ]
     },
     {
      "title": "引脚电平",
-     "subtitle": "按当前规格求值",
+     "subtitle": "可写数值或规格公式（如 0.6*DC.VDD），回车写入电平表，下次运行时重新加载",
      "span": 12,
      "widgets": [
       {
-       "type": "table",
+       "type": "edit_table",
        "source": "lv",
        "rows_field": "rows",
+       "key": [
+        "pin"
+       ],
+       "write": "set_level",
+       "height": 360,
+       "also": [
+        "chk"
+       ],
        "columns": [
         {
          "field": "pin",
-         "label": "引脚"
+         "label": "引脚",
+         "width": 90
         },
         {
-         "field": "vil",
-         "label": "Vil"
+         "field": "Vil",
+         "label": "Vil",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "vih",
-         "label": "Vih"
+         "field": "Vih",
+         "label": "Vih",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "vol",
-         "label": "Vol"
+         "field": "Vol",
+         "label": "Vol",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "voh",
-         "label": "Voh"
+         "field": "Voh",
+         "label": "Voh",
+         "width": 110,
+         "editor": "text"
         },
         {
-         "field": "iol",
-         "label": "Iol"
+         "field": "Iol",
+         "label": "Iol",
+         "width": 90,
+         "editor": "text"
         },
         {
-         "field": "ioh",
-         "label": "Ioh"
+         "field": "Ioh",
+         "label": "Ioh",
+         "width": 90,
+         "editor": "text"
         },
         {
-         "field": "vterm",
-         "label": "Vterm"
+         "field": "Vterm",
+         "label": "Vterm",
+         "width": 90,
+         "editor": "text"
         },
         {
          "field": "mode",
-         "label": "端接"
+         "name": "TerminationMode",
+         "label": "端接",
+         "width": 124,
+         "editor": "combo",
+         "options": [
+          "HighZ",
+          "ActiveLoad",
+          "Vterm"
+         ]
         },
         {
          "field": "formulas",
-         "label": "公式"
+         "label": "公式求值"
         }
+       ],
+       "row_actions": [
+        {
+         "label": "删除",
+         "method": "remove_level"
+        }
+       ]
+      },
+      {
+       "type": "combo",
+       "id": "lv_pin",
+       "label": "引脚 / 组",
+       "options_from": {
+        "method": "pin_options",
+        "args": {
+         "groups": true
+        },
+        "field": "pins"
+       }
+      },
+      {
+       "type": "button",
+       "label": "添加电平",
+       "style": "secondary",
+       "action": {
+        "method": "add_level",
+        "args": {
+         "pin": "$form.lv_pin"
+        }
+       },
+       "refresh": [
+        "lv",
+        "chk"
        ]
       }
      ]
@@ -1347,29 +1740,113 @@
      "span": 7,
      "widgets": [
       {
-       "type": "table",
+       "type": "edit_table",
        "source": "pins",
        "rows_field": "rows",
+       "key": [
+        "pin"
+       ],
+       "write": "set_pin",
+       "height": 560,
+       "also": [
+        "chk"
+       ],
        "columns": [
         {
          "field": "pin",
-         "label": "引脚"
+         "label": "引脚",
+         "width": 90
         },
         {
          "field": "instrument",
-         "label": "仪器"
+         "label": "仪器",
+         "width": 140,
+         "editor": "combo",
+         "options_field": "instruments"
         },
         {
          "field": "channel",
-         "label": "通道"
+         "label": "通道",
+         "width": 70,
+         "editor": "text"
         },
         {
          "field": "groups",
-         "label": "分组"
+         "label": "分组",
+         "editor": "text"
         },
         {
          "field": "patterns",
-         "label": "用到的图形数"
+         "label": "图形数",
+         "width": 64
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "删除",
+         "method": "remove_pin"
+        }
+       ]
+      },
+      {
+       "type": "text",
+       "id": "new_pin",
+       "label": "新引脚",
+       "value": "",
+       "placeholder": "名称",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "添加引脚",
+       "style": "secondary",
+       "action": {
+        "method": "add_pin",
+        "args": {
+         "name": "$form.new_pin"
+        }
+       },
+       "refresh": [
+        "pins",
+        "chk"
+       ]
+      }
+     ],
+     "subtitle": "通道和分组回车写入 .pinmap；分组用逗号分隔，写新名字就新建分组"
+    },
+    {
+     "title": "仪器",
+     "subtitle": "名称要和真机的资源名一致（如 PXI1Slot15）",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "inst",
+       "rows_field": "rows",
+       "key": [
+        "instrument"
+       ],
+       "write": "rename_instrument",
+       "height": 160,
+       "also": [
+        "pins"
+       ],
+       "columns": [
+        {
+         "field": "name",
+         "label": "名称",
+         "editor": "text",
+         "mono": true
+        },
+        {
+         "field": "channels",
+         "label": "通道数",
+         "width": 80
+        },
+        {
+         "field": "pins",
+         "label": "已接引脚",
+         "width": 80
         }
        ]
       }
@@ -1436,6 +1913,28 @@
         "method": "rescan",
         "args": {}
        },
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "还原工程文件",
+       "style": "ghost",
+       "action": {
+        "method": "restore_sheets",
+        "args": {}
+       },
+       "refresh": [
+        "pins",
+        "inst",
+        "lv",
+        "ts",
+        "edges",
+        "pedges",
+        "vec",
+        "sum",
+        "tl",
+        "chk"
+       ],
        "reload_page": true
       }
      ]

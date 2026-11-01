@@ -18,6 +18,9 @@ Item {
     property bool polling: true
     property var values: ({})
     property var form: ({})            // values of action-less inputs, referenced as "$form.<id>"
+    // Rejected spreadsheet input survives tab changes until corrected or undone.
+    property var tableDrafts: ({})
+    property int tableWrites: 0
     property int tabIndex: 0
     readonly property var tabs: page.tabs || []
     // A page is either { sections: [...] } or { tabs: [{ title, sections }] }; sources are shared.
@@ -40,6 +43,12 @@ Item {
     function act(action, value, cb) {
         if (!action || !action.method || !device) { if (cb) cb(false, null); return }
         flushRequested()
+        if ((tableWrites || Object.keys(tableDrafts).length) && !/abort|stop/.test(action.method)) {
+            const error = tableWrites ? "请等待表格校验完成后重试" : "请先修正或撤销表格中标红的输入";
+            ctx.deviceEvent({ type: "log", level: "error", message: error })
+            if (cb) cb(false, { error: error })
+            return
+        }
         const args = Fmt.substitute(action.args || {}, value, form)
         device.call(action.method, args, (ok, res) => {
             if (!ok) ctx.deviceEvent({ type: "log", level: "error",
@@ -78,7 +87,7 @@ Item {
 
     objectName: "widget:tab"
     function apply(v) { tabIndex = Math.max(0, Math.min(tabs.length - 1, parseInt(v))) }
-    onDeviceChanged: load()
+    onDeviceChanged: { tableDrafts = ({}); load() }
 
     Connections {
         target: App

@@ -33,6 +33,10 @@ ColumnLayout {
     property var sourceData: ({})
     property var rows: []
     property var rev: undefined
+    readonly property string draftPrefix: spec.source + "|" + (sourceData.pattern || "") + "|"
+    readonly property var drafts: ctx ? ctx.tableDrafts : ({})
+    readonly property var draftIssues: Object.keys(drafts).filter(k => k.indexOf(draftPrefix) === 0)
+        .map(k => ({ v: drafts[k].r, error: true, text: drafts[k].error }))
     property string message: ""
     property bool messageIsError: false
     property int curRow: -1
@@ -49,7 +53,7 @@ ColumnLayout {
     readonly property int headerH: 34
     readonly property var pins: spec.pin_columns ? (Fmt.field(sourceData, spec.pin_columns.field) || []) : []
     readonly property var actions: spec.row_actions || []
-    readonly property var issues: spec.issues_field ? (Fmt.field(sourceData, spec.issues_field) || []) : []
+    readonly property var issues: (spec.issues_field ? (Fmt.field(sourceData, spec.issues_field) || []) : []).concat(draftIssues)
     readonly property int errorCount: issues.filter(x => x.error).length
     readonly property var issueByRow: {
         const by = {}
@@ -110,6 +114,14 @@ ColumnLayout {
         return columns.length - 1
     }
     function valueOf(row, col) {
+        const draft = drafts[draftKey(row, col)]
+        if (draft) return draft.value
+        return storedValueOf(row, col)
+    }
+    function draftKey(row, col) {
+        return draftPrefix + JSON.stringify(keyArgs(row)) + "|" + (col.pin !== undefined ? "pin:" + col.pin : (col.name || col.field))
+    }
+    function storedValueOf(row, col) {
         if (col.pin !== undefined) return String(Fmt.field(row, spec.pin_columns.states) || "").charAt(col.pinIndex)
         const v = col.field ? Fmt.field(row, col.field) : undefined
         return v === undefined || v === null ? "" : String(v)
@@ -163,15 +175,33 @@ ColumnLayout {
         const todo = cells.filter(x => editable(x.r, x.c) && valueOf(rows[x.r], columns[x.c]) !== x.value)
         if (!todo.length) return
         const args = todo.map(x => cellArgs(x.r, x.c, x.value))
+        const keys = todo.map(x => draftKey(rows[x.r], columns[x.c]))
+        const retainInput = !!spec.issues_field
+        const record = (indices, ok, res) => {
+            if (!retainInput) return
+            const copy = Object.assign({}, ctx.tableDrafts)
+            for (const i of indices) {
+                if (ok) delete copy[keys[i]]
+                else copy[keys[i]] = { r: todo[i].r, value: todo[i].value, error: res && res.error ? res.error : "写入失败" }
+            }
+            ctx.tableDrafts = copy
+        }
+        ctx.tableWrites++
+        const done = () => { ctx.tableWrites--; refresh() }
         say("")
         if (spec.write_many && args.length > 1) {
-            ctx.device.call(spec.write_many, { cells: args }, (ok, res) => { if (!ok) failed(spec.write_many, res); refresh() })
+            ctx.device.call(spec.write_many, { cells: args }, (ok, res) => {
+                record(args.map((_, i) => i), ok, res)
+                if (!ok) failed(spec.write_many, res)
+                done()
+            })
             return
         }
         const next = i => {
-            if (i >= args.length) { refresh(); return }
+            if (i >= args.length) { done(); return }
             ctx.device.call(spec.write, args[i], (ok, res) => {
-                if (!ok) { failed(spec.write, res); refresh(); return }
+                record([i], ok, res)
+                if (!ok) { failed(spec.write, res); done(); return }
                 next(i + 1)
             })
         }
@@ -193,6 +223,7 @@ ColumnLayout {
     }
     function runAction(a) {
         commitEdit()
+        if (ctx.tableWrites || draftIssues.length) { say("请先修正或撤销标红的输入，再修改表格结构", true); return }
         if (curRow < 0) return
         if (a.range) {
             const args = keyArgs(rows[a.at === "bottom" ? selBottom : selTop])
@@ -226,6 +257,15 @@ ColumnLayout {
     }
     function undo() {
         commitEdit()
+        if (ctx.tableWrites) { say("请等待表格校验完成后重试", true); return }
+        const keys = Object.keys(drafts).filter(k => k.indexOf(draftPrefix) === 0)
+        if (keys.length) {
+            const copy = Object.assign({}, drafts)
+            delete copy[keys[keys.length - 1]]
+            ctx.tableDrafts = copy
+            say("")
+            return
+        }
         if (!spec.undo) { say("这张表回车即写入文件，可用“还原工程文件”恢复"); return }
         ctx.device.call(spec.undo, {}, (ok, res) => { if (ok) say(""); else failed(spec.undo, res); refresh() })
     }
@@ -415,6 +455,7 @@ ColumnLayout {
                             required property int index
                             readonly property var col: modelData
                             readonly property string value: w.valueOf(rowItem.row, col)
+                            readonly property var rejected: w.drafts[w.draftKey(rowItem.row, col)]
                             readonly property bool isPin: col.editor === "state"
                             width: w.widthOf(col)
                             height: w.rowH
@@ -428,7 +469,8 @@ ColumnLayout {
                                 horizontalAlignment: cell.isPin ? Text.AlignHCenter : Text.AlignLeft
                                 verticalAlignment: Text.AlignVCenter
                                 text: cell.value
-                                color: cell.isPin && cell.value === "X" ? Theme.textFaint
+                                color: cell.rejected ? Theme.error
+                                     : cell.isPin && cell.value === "X" ? Theme.textFaint
                                      : cell.isPin && (cell.value === "H" || cell.value === "L") ? Theme.toneColor("warning")
                                      : cell.isPin && cell.value === "1" ? Theme.accent
                                      : w.editable(rowItem.index, cell.index) ? Theme.text : Theme.textMuted
@@ -472,7 +514,7 @@ ColumnLayout {
                             verticalAlignment: TextInput.AlignVCenter
                             clip: true
                             selectByMouse: true
-                            color: Theme.text
+                            color: w.drafts[w.draftKey(rowItem.row, w.editColumn)] ? Theme.error : Theme.text
                             selectionColor: Theme.accentSoft
                             selectedTextColor: Theme.text
                             font.family: w.editColumn.mono ? Theme.mono : Theme.sans

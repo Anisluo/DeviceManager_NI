@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QThread>
 #include <QImage>
+#include <QPainter>
 #include <QMouseEvent>
 #include <QQuickWindow>
 #include <QWheelEvent>
@@ -389,6 +390,39 @@ int main(int argc, char** argv)
         CHECK(near(logic->viewMin(), zoomed) && near(logic->cursor1(), 30e-6, 1e-9));
         logic->setData(QVariantList{lane("A", 3.3, {0.0}, {0.0})}, 50e-6);       // another pattern
         CHECK(near(logic->viewMax(), 50e-6) && logic->laneCount() == 1);
+        // Intent is rendered independently of numeric values: H/L use symbolic rails,
+        // X uses the center dashed line; no vertical edges join compare states.
+        logic->setSize(QSizeF(1200, 266));
+        QVariantList states;
+        const QStringList symbols{"0", "1", "X", "H", "L", "X"};
+        for (int i = 0; i < symbols.size(); ++i)
+            states.push_back(QVariantMap{{"t", i * 1e-6}, {"end", (i + 1) * 1e-6},
+                {"state", symbols[i]}, {"vector", i}, {"cycle_t", i * 1e-6},
+                {"period", 1e-6}, {"cycles", 1}, {"strobe", 0.7e-6},
+                {"compare_defined", true}, {"threshold", 2.0}});
+        auto intentLane = lane("SWDIO", 3.3, {0.0, 1e-6, 2e-6, 3e-6, 4e-6, 5e-6}, {0.0, 3.3, 1.65, 2.0, 0.8, 1.65});
+        intentLane["states"] = states;
+        logic->setData(QVariantList{intentLane}, 6e-6);
+        logic->fit();
+        QImage intent(1200, 266, QImage::Format_ARGB32_Premultiplied);
+        intent.fill(QColor("#FBFAF7"));
+        { QPainter painter(&intent); logic->paint(&painter); }
+        const QRectF ir = logic->plotRect();
+        const auto ix = [&](double us) { return int(std::round(ir.left() + us / 6.0 * ir.width())); };
+        const int high = int(ir.top() + 12), low = int(ir.bottom() - 12), middle = int(ir.center().y());
+        CHECK(intent.pixelColor(ix(3.2), high) == QColor("#6089B0"));
+        CHECK(intent.pixelColor(ix(4.2), low) == QColor("#6089B0"));
+        CHECK(intent.pixelColor(ix(3.0), middle) != QColor("#6089B0"));
+        int dash = 0, gap = 0;
+        for (int x = ix(2.1); x < ix(2.9); ++x) {
+            if (intent.pixelColor(x, middle) == QColor("#FBFAF7")) ++gap;
+            else ++dash;
+        }
+        CHECK(dash > 0 && gap > 0);
+        intent.save(r.out + "/logic_intent.png");
+        r.mouse(QEvent::MouseButtonPress, QPointF(ix(3.7) + 2, ir.top() - 8), Qt::LeftButton, Qt::LeftButton);
+        r.mouse(QEvent::MouseButtonRelease, QPointF(ix(3.7) + 2, ir.top() - 8), Qt::LeftButton, Qt::NoButton);
+        CHECK(near(logic->cursor1(), 3.7e-6, 1e-9));   // snap to compare time, not the vector boundary
     }
 
     std::printf("%s (%d failures)\n", g_failures ? "FAILED" : "ALL OK", g_failures);

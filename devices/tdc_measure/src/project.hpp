@@ -61,6 +61,7 @@ struct EdgeTimes {
     std::string format = "NR";
     double on = 0, data = 0, ret = std::numeric_limits<double>::quiet_NaN(), off = 0, strobe = 0;
     bool defined = false;                  // the timeset has an entry for this pin or one of its groups
+    bool compare_defined = false;          // an explicit, evaluated compare strobe exists
 };
 
 struct TimesetModel {

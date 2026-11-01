@@ -772,6 +772,7 @@
         "args": {}
        },
        "publish": "pe_tl",
+       "id": "pe_wave_sim",
        "fit": true
       },
       {
@@ -904,6 +905,7 @@
         "args": {}
        },
        "publish": "pe_tl",
+       "id": "pe_wave_sim",
        "fit": true
       },
       {

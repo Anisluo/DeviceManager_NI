@@ -14,8 +14,10 @@
 // (it snaps to a nearby edge, never the other cursor's), or click the ruler above the strips: left
 // places cursor 1, right cursor 2. Flags keep apart, and a cursor out of view keeps a flag at the edge.
 //
-//   LogicView {}  +  setData([{ name, note, lo, hi, t: [s], v: [V] }], tEnd)
+//   LogicView {}  +  setData([{ name, note, lo, hi, t: [s], v: [V], states?: [...] }], tEnd)
 // A lane holds its value from one (t, v) point to the next, up to tEnd.
+// Optional states separate drive samples from pattern intent: X is a dashed center line,
+// H/L are symbolic expected rails with periodic compare strobes, never acquired voltages.
 class LogicView : public QQuickPaintedItem {
     Q_OBJECT
     Q_PROPERTY(QColor textColor MEMBER m_text NOTIFY styleChanged)
@@ -33,6 +35,7 @@ class LogicView : public QQuickPaintedItem {
     Q_PROPERTY(double viewMax READ viewMax NOTIFY viewChanged)
     Q_PROPERTY(double cursor1 READ cursor1 NOTIFY viewChanged)
     Q_PROPERTY(double cursor2 READ cursor2 NOTIFY viewChanged)
+    Q_PROPERTY(QString hoverText MEMBER m_hoverText NOTIFY hoverTextChanged)
 public:
     static constexpr double kRuler = 24, kAxis = 26, kLane = 72;   // heights in pixels
 
@@ -55,6 +58,7 @@ signals:
     void styleChanged();
     void viewChanged();
     void dataChanged();
+    void hoverTextChanged();
 
 protected:
     void mousePressEvent(QMouseEvent* e) override;
@@ -67,9 +71,17 @@ protected:
 
 private:
     struct Lane {
+        struct State {
+            double t = 0, end = 0, cycle = 0, period = 0, strobe = 0, threshold = 0;
+            long cycles = 0;
+            int vector = 0;
+            QString symbol, timeset;
+            bool compareDefined = false;
+        };
         QString name, note;
         double lo = 0, hi = 1;
         std::vector<double> t, v;
+        std::vector<State> states;
     };
     enum class Drag { None, Box, Pan, Cursor };
 
@@ -92,6 +104,7 @@ private:
     QString m_fontFamily = QStringLiteral("Segoe UI");
     int m_fontSize = 11;
     QString m_emptyText = QStringLiteral("暂无数据");
+    QString m_hoverText;
 
     Drag m_drag = Drag::None;
     int m_dragCursor = 0;

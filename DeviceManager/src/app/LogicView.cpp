@@ -6,6 +6,7 @@
 #include <QHoverEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QWheelEvent>
 
 #include <algorithm>
@@ -44,6 +45,17 @@ void LogicView::setData(const QVariant& lanesV, double tEnd)
         l.v = toDoubles(m.value("v"));
         l.t.resize(std::min(l.t.size(), l.v.size()));
         l.v.resize(l.t.size());
+        for (const auto& value : unwrapList(m.value("states"))) {
+            const auto s = unwrapMap(value);
+            Lane::State state;
+            state.t = s.value("t").toDouble(); state.end = s.value("end").toDouble();
+            state.cycle = s.value("cycle_t").toDouble(); state.period = s.value("period").toDouble();
+            state.strobe = s.value("strobe").toDouble(); state.threshold = s.value("threshold").toDouble();
+            state.cycles = s.value("cycles").toLongLong(); state.vector = s.value("vector").toInt();
+            state.symbol = s.value("state").toString(); state.timeset = s.value("timeset").toString();
+            state.compareDefined = s.value("compare_defined").toBool();
+            l.states.push_back(std::move(state));
+        }
         lanes.push_back(std::move(l));
     }
     bool same = lanes.size() == m_lanes.size();
@@ -123,7 +135,19 @@ double LogicView::snapped(double t, int cursor) const
         const auto at = std::lower_bound(l.t.begin(), l.t.end(), t);
         for (auto it : {at, at == l.t.begin() ? at : at - 1}) {
             if (it == l.t.end() || it == l.t.begin()) continue;     // the first point is no edge
+            bool driveEdge = l.states.empty();
+            for (const auto& s : l.states)
+                if (*it >= s.t && *it < s.end) { driveEdge = s.symbol == "0" || s.symbol == "1"; break; }
+            if (!driveEdge) continue;
             if (*it != taken && std::abs(*it - t) < distance) { distance = std::abs(*it - t); best = *it; }
+        }
+        for (const auto& s : l.states) {
+            if ((s.symbol != "H" && s.symbol != "L") || !s.compareDefined || s.period <= 0 || s.cycles <= 0) continue;
+            const long n = std::clamp(long(std::round((t - s.cycle - s.strobe) / s.period)), 0L, s.cycles - 1);
+            const double when = s.cycle + n * s.period + s.strobe;
+            if (when >= s.t && when < s.end && when != taken && std::abs(when - t) < distance) {
+                distance = std::abs(when - t); best = when;
+            }
         }
     }
     return best;
@@ -199,6 +223,18 @@ void LogicView::paint(QPainter* p)
         if (l.t.empty()) continue;
         p->save();
         p->setClipRect(QRectF(r.left(), top, r.width(), laneH));
+        // Numeric samples are only the drive trace. Remove non-drive intervals from
+        // its clip so H/L never look like driven edges or measured DUT voltages.
+        QPainterPath driveClip;
+        driveClip.setFillRule(Qt::WindingFill);
+        if (l.states.empty()) driveClip.addRect(QRectF(r.left(), top, r.width(), laneH));
+        for (const auto& state : l.states) {
+            if (state.end < m_t0 || state.t > m_t1 || (state.symbol != "0" && state.symbol != "1")) continue;
+            const double left = std::max(r.left(), toPx(state.t)), right = std::min(r.right(), toPx(state.end));
+            driveClip.addRect(QRectF(left, top, std::max(0.0, right - left), laneH));
+        }
+        p->save();
+        p->setClipPath(driveClip, Qt::IntersectClip);
         p->setPen(QPen(laneColor(int(i)), 1.5));
         // the point before the view gives the level at its left edge
         auto from = std::upper_bound(l.t.begin(), l.t.end(), m_t0);
@@ -215,6 +251,41 @@ void LogicView::paint(QPainter* p)
         }
         pts.emplace_back(end, y);
         p->drawPolyline(pts.data(), int(pts.size()));
+        p->restore();
+        const QColor compare("#6089B0");
+        for (const auto& state : l.states) {
+            if (state.end < m_t0 || state.t > m_t1 || state.symbol == "0" || state.symbol == "1") continue;
+            const double x0 = std::max(r.left(), toPx(state.t)), x1 = std::min(r.right(), toPx(state.end));
+            if (x1 <= x0) continue;
+            const bool hl = state.symbol == "H" || state.symbol == "L";
+            const double sy = hl ? (state.symbol == "H" ? yHi : yLo) : mid;
+            if (hl) {
+                QColor band = compare; band.setAlpha(30);
+                p->fillRect(QRectF(x0, sy - 4, x1 - x0, 8), band);
+                p->setPen(QPen(compare, 1));
+                p->drawLine(QLineF(x0, sy, x1, sy));
+            } else {
+                p->setPen(QPen(m_faint, 1.5, Qt::DashLine));
+                p->drawLine(QLineF(x0, mid, x1, mid));
+            }
+            if (x1 - x0 > 26) {
+                p->setPen(hl ? compare : m_faint);
+                p->drawText(QRectF(x0 + 3, hl && state.symbol == "H" ? sy + 4 : sy - 19, x1 - x0 - 6, 16), Qt::AlignCenter, state.symbol);
+            }
+            // At overview scales the band remains; at readable scales show each strobe.
+            if (!hl || !state.compareDefined || state.period <= 0 || toPx(state.period) - toPx(0) < 10) continue;
+            const long first = std::max(0L, long(std::ceil((m_t0 - state.cycle - state.strobe) / state.period)));
+            const long last = std::min(state.cycles - 1, long(std::floor((m_t1 - state.cycle - state.strobe) / state.period)));
+            p->setPen(QPen(compare, 1.5));
+            p->setBrush(Qt::NoBrush);
+            for (long n = first; n <= last; ++n) {
+                const double st = state.cycle + n * state.period + state.strobe;
+                if (st < state.t || st >= state.end) continue;
+                const double sx = toPx(st);
+                p->drawLine(QLineF(sx, sy - 9, sx, sy + 9));
+                p->drawPolygon(QPolygonF{QPointF(sx, sy - 4), QPointF(sx + 4, sy), QPointF(sx, sy + 4), QPointF(sx - 4, sy)});
+            }
+        }
         p->restore();
     }
 
@@ -359,12 +430,34 @@ void LogicView::hoverMoveEvent(QHoverEvent* e)
     if (onCursor && r.contains(m_hover)) setCursor(Qt::SizeHorCursor);
     else if (r.contains(m_hover)) setCursor(Qt::CrossCursor);
     else unsetCursor();
+    QString tip;
+    if (r.contains(m_hover) && !m_lanes.empty()) {
+        const auto& lane = m_lanes[std::min(m_lanes.size() - 1, size_t((m_hover.y() - r.top()) / (r.height() / m_lanes.size())))];
+        const double time = fromPx(m_hover.x());
+        for (const auto& s : lane.states) {
+            if (time < s.t || time >= s.end) continue;
+            tip = QStringLiteral("%1 · v%2 · %3 · %4").arg(lane.name).arg(s.vector).arg(s.symbol, s.timeset);
+            if (s.symbol == "H" || s.symbol == "L") {
+                tip += QStringLiteral("\n期望 %1 %2 · 阈值，不是实测电压").arg(s.symbol == "H" ? "≥ VOH" : "≤ VOL", si(s.threshold, "V", 5));
+                if (s.compareDefined && s.period > 0) {
+                    const long cycle = std::clamp(long(std::floor((time - s.cycle) / s.period)), 0L, s.cycles - 1);
+                    tip += QStringLiteral("\nStrobe +%1 · t=%2").arg(si(s.strobe, "s", 5), si(s.cycle + cycle * s.period + s.strobe, "s", 6));
+                } else tip += QStringLiteral("\n未定义比较时序");
+            } else if (s.symbol == "X") tip += QStringLiteral("\n不驱动、不比较；中线不表示电压");
+            else if (s.symbol == "0" || s.symbol == "1") tip += QStringLiteral("\n驱动输出");
+            else tip += QStringLiteral("\n非驱动状态；仅显示状态符号");
+            break;
+        }
+    }
+    if (tip != m_hoverText) { m_hoverText = tip; emit hoverTextChanged(); }
     update();
 }
 
 void LogicView::hoverLeaveEvent(QHoverEvent*)
 {
     m_hover = QPointF(-1, -1);
+    m_hoverText.clear();
+    emit hoverTextChanged();
     unsetCursor();
     update();
 }

@@ -612,6 +612,14 @@ int main(int argc, char** argv)
             const Json tl_lanes = call("timeline");
             CHECK(tl_lanes["lanes"].size() == 4 && tl_lanes.number("t_end", 0) > 0, "one lane per pin");
             const Json& i1 = tl_lanes["lanes"].items()[1];
+            CHECK(i1["states"].size() > 0, "lane carries pattern intent separately from voltages");
+            bool saw_drive = false;
+            for (const auto& state : i1["states"].items()) {
+                CHECK(state.number("end", -1) >= state.number("t", 0), "state interval is ordered");
+                if (state.str("state") == "1") saw_drive = true;
+                CHECK(state.number("period", 0) > 0 && state.integer("cycles", 0) > 0, "repeat timing is retained");
+            }
+            CHECK(saw_drive, "drive state is available to the renderer");
             CHECK(i1.str("name") == "I1" && close_to(i1.number("lo", -1), 0, 1e-12) && close_to(i1.number("hi", -1), 2.5, 1e-12),
                   "limits from the levels: %g %g", i1.number("lo", -1), i1.number("hi", -1));
             double top = 0;
@@ -634,6 +642,23 @@ int main(int argc, char** argv)
     }
 
     std::printf("one-click rows and renames\n");
+    {
+        call("select", kv("name", "TDC_Debug"));
+        call("edit_vector", cell(4, "instruction", "repeat(10)"));
+        call("edit_vector", cell(4, "pin:I0", "H"));
+        call("set_edge", Json{{"timeset", "ten_ns"}, {"pin", "AllPins"}, {"field", "Strobe"}, {"value", "7 ns"}});
+        const Json tl = call("timeline");
+        bool found = false;
+        for (const auto& s : tl["lanes"][0]["states"].items()) {
+            if (s.integer("vector", -1) != 4) continue;
+            found = true;
+            CHECK(s.str("state") == "H" && s.integer("cycles", 0) == 10, "compare repeat preserves H and count");
+            CHECK(close_to(s.number("strobe", 0), 7e-9, 1e-12), "strobe follows the timing sheet");
+            CHECK(s.boolean("compare_defined", false), "compare timing is defined");
+        }
+        CHECK(found, "compare segment is present");
+        call("revert");
+    }
     {
         auto has_row = [](const char* method, const char* field, const std::string& value) {
             const Json table = call(method);

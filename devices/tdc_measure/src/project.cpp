@@ -1223,7 +1223,31 @@ dm::Json analyze(const Pattern& p, const TimingModel& tm, double busy_delay, con
         const std::string role = role_of(p.pins[k]);
         if (!role.empty()) note += " · " + role;
         if (!edges[p.pins[k]].format.empty()) note += " · " + edges[p.pins[k]].format;
-        lanes.push_back(dm::Json{{"name", p.pins[k]}, {"note", note}, {"lo", lo}, {"hi", hi}, {"t", t}, {"v", value}});
+        // Keep pattern intent separate from the numeric drive trace. Compare thresholds
+        // are not DUT voltages; repeated vectors retain every strobe through period/count.
+        std::vector<dm::Json> state_rows;
+        bool was_driving = false;
+        for (const auto& seg : r.segs) {
+            const char state = k < p.states[seg.v].size() ? p.states[seg.v][k] : 'X';
+            const bool driving = state == '0' || state == '1';
+            const auto& edge = edge_of(tm, p.timeset_of(seg.v), p.pins[k]);
+            double start = seg.t;
+            if (!driving && was_driving) start += std::clamp(edge.off, 0.0, seg.period);
+            else if (driving && !was_driving) start += std::clamp(edge.on, 0.0, seg.period);
+            state_rows.push_back(dm::Json{{"t", start}, {"end", seg.t + seg.cycles * seg.period},
+                {"state", std::string(1, state)}, {"vector", int(seg.v)}, {"timeset", p.timeset_of(seg.v)},
+                {"cycle_t", seg.t}, {"period", seg.period}, {"cycles", seg.cycles},
+                {"strobe", edge.strobe}, {"compare_defined", edge.compare_defined && edge.strobe >= 0 && edge.strobe <= seg.period},
+                {"threshold", state == 'H' ? v.voh : v.vol}});
+            was_driving = driving;
+        }
+        // A non-drive state lasts until the next drive-on edge, not just to the boundary.
+        for (size_t j = 0; j + 1 < state_rows.size(); ++j)
+            state_rows[j]["end"] = state_rows[j + 1]["t"];
+        dm::Json states = dm::Json::array();
+        for (auto& row : state_rows) states.push_back(std::move(row));
+        lanes.push_back(dm::Json{{"name", p.pins[k]}, {"note", note}, {"lo", lo}, {"hi", hi},
+                                {"t", t}, {"v", value}, {"states", states}});
     }
     out["timeline"] = dm::Json{{"t", ts}, {"dt_ms", std::isfinite(resolution) ? resolution * 1e3 : 0.0}, {"channels", channels},
                                {"lanes", lanes}, {"t_end", std::max(r.record_end, t_last)}};
@@ -1347,7 +1371,7 @@ TimingModel Project::model(const std::map<std::string, double>& sym) const
                     else if (key == "Data") e.data = v;
                     else if (key == "Return") e.ret = v;
                     else if (key == "Off") e.off = v;
-                    else if (key == "Strobe") e.strobe = v;
+                    else if (key == "Strobe") { e.strobe = v; e.compare_defined = std::isfinite(v); }
                 }
                 if (!bad.empty()) m.problems.emplace_back(pe.pin, bad + " 无法求值");
                 if (e.format != "NR" && !(std::isfinite(e.ret) && e.ret > e.data))

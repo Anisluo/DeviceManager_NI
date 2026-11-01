@@ -36,7 +36,7 @@ WAVE_SECTION = {
                 "拖动光标 C1、C2 测量时间，靠近边沿自动吸附，也可在顶部标尺左键放 C1、右键放 C2",
     "span": 12,
     "widgets": [
-        button("仿真", "timeline", style="primary", publish="tl"),
+        button("仿真", "timeline", style="primary", publish="tl", id="wave_sim"),
         {"type": "logic", "source": "tl", "hint": "点“仿真”生成波形",
          "stale_source": "sum", "stale_field": "wave_rev"},
     ],

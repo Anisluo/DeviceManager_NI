@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls.Basic
 import DeviceManager
 import DeviceManager.Core
 import "../js/Format.js" as Fmt
@@ -82,5 +83,17 @@ ColumnLayout {
         seriesColors: Theme.series
         fontFamily: Theme.sans
         fontSize: Theme.fontXs
+        ToolTip.visible: hoverText.length > 0
+        ToolTip.text: hoverText
+        ToolTip.delay: 450
+    }
+    Text {
+        visible: w.shown
+        Layout.fillWidth: true
+        text: "实线 0/1：驱动    灰色中线虚线 X：不驱动、不比较    蓝色 H/L：期望条件    ◇：Strobe 比较时刻（放大可见）\n当前显示激励与期望，不代表 DUT 实际响应；H/L 的高低位置是逻辑示意。"
+        color: Theme.textMuted
+        font.family: Theme.sans
+        font.pixelSize: Theme.fontXs
+        wrapMode: Text.Wrap
     }
 }

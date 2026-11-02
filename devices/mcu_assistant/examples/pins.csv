@@ -1,0 +1,9 @@
+number,name,functions,type
+1,VDD,Power supply,power
+2,PA0,GPIO / ADC_IN0 / USART_TX,I/O
+3,PA1,GPIO / ADC_IN1 / USART_RX,I/O
+4,PA2,GPIO / SPI_SCK,I/O
+5,PA3,GPIO / SPI_MOSI,I/O
+6,SWCLK,SWD clock,debug
+7,SWDIO,SWD data,debug
+8,VSS,Ground,power

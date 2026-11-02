@@ -1,0 +1,7 @@
+{
+  "id": "mcu_assistant", "name": "MCU助手", "version": "0.1.0",
+  "type": "python", "entry": "mcu_assistant:McuAssistant", "abi": 1, "category": "task",
+  "description": "导入 CMSIS-Pack/PDSC，查看器件、封装引脚数、内存与 FLM 烧录算法，解析 SVD 寄存器和位域，离线配置与导出。引脚功能取决于厂商数据，可补充 XML/CSV。",
+  "capabilities": ["mcu.pack", "mcu.svd", "mcu.offline_config"], "page": "page.json",
+  "default_config": {"simulate": true}
+}

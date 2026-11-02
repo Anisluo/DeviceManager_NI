@@ -1,0 +1,865 @@
+{
+ "title": "MCU助手",
+ "subtitle": "CMSIS-Pack · 器件 / 封装 · 烧录算法 · 引脚功能 · SVD 寄存器离线配置",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "info",
+   "method": "info",
+   "interval_ms": 2000
+  },
+  {
+   "id": "algorithms",
+   "method": "algorithms",
+   "interval_ms": 5000
+  },
+  {
+   "id": "pins",
+   "method": "pin_table",
+   "interval_ms": 3000
+  },
+  {
+   "id": "registers",
+   "method": "registers",
+   "interval_ms": 3000
+  },
+  {
+   "id": "fields",
+   "method": "fields",
+   "interval_ms": 3000
+  },
+  {
+   "id": "config",
+   "method": "configuration",
+   "interval_ms": 3000
+  }
+ ],
+ "tabs": [
+  {
+   "title": "Pack与器件",
+   "sections": [
+    {
+     "title": "导入 Pack",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "pack_path",
+       "label": "文件路径",
+       "value": "",
+       "placeholder": "C:\\Packs\\Vendor.Device_DFP.1.0.0.pack",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导入 Pack",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "import_pack",
+        "args": {
+         "path": "$form.pack_path"
+        }
+       },
+       "refresh": [
+        "info",
+        "algorithms",
+        "pins",
+        "registers",
+        "fields",
+        "config"
+       ],
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "载入教学示例",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "demo",
+        "args": {}
+       },
+       "refresh": [
+        "info",
+        "algorithms",
+        "pins",
+        "registers",
+        "fields",
+        "config"
+       ],
+       "reload_page": true
+      }
+     ],
+     "subtitle": "支持 .pack 和已解包的 .pdsc；仅解析元数据，不执行包内脚本或算法。",
+     "span": 12
+    },
+    {
+     "title": "选择 MCU",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "device_query",
+       "label": "型号筛选",
+       "value": "",
+       "placeholder": "例如 STM32L072",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "筛选型号",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "filter_devices",
+        "args": {
+         "query": "$form.device_query"
+        }
+       },
+       "reload_page": true
+      },
+      {
+       "type": "combo",
+       "id": "device_choice",
+       "label": "器件型号",
+       "options_from": {
+        "method": "device_options",
+        "field": "devices"
+       },
+       "init": {
+        "method": "info",
+        "field": "device"
+       }
+      },
+      {
+       "type": "button",
+       "label": "打开器件",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "select_device",
+        "args": {
+         "name": "$form.device_choice"
+        }
+       },
+       "refresh": [
+        "info",
+        "algorithms",
+        "pins",
+        "registers",
+        "fields",
+        "config"
+       ],
+       "reload_page": true
+      },
+      {
+       "type": "combo",
+       "id": "processor_choice",
+       "label": "处理器",
+       "options_from": {
+        "method": "processor_options",
+        "field": "processors"
+       },
+       "init": {
+        "method": "info",
+        "field": "processor"
+       }
+      },
+      {
+       "type": "button",
+       "label": "切换内核",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "select_processor",
+        "args": {
+         "name": "$form.processor_choice"
+        }
+       },
+       "refresh": [
+        "info",
+        "algorithms",
+        "pins",
+        "registers",
+        "fields",
+        "config"
+       ],
+       "reload_page": true
+      }
+     ],
+     "subtitle": "封装不同的型号/variant 分开选择。多核 MCU 可分别选择处理器和对应 SVD。",
+     "span": 12
+    },
+    {
+     "title": "器件信息",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "Pack",
+       "source": "info",
+       "field": "pack"
+      },
+      {
+       "type": "readout",
+       "label": "当前器件",
+       "source": "info",
+       "field": "device"
+      },
+      {
+       "type": "readout",
+       "label": "内核",
+       "source": "info",
+       "field": "core"
+      },
+      {
+       "type": "readout",
+       "label": "封装引脚数",
+       "source": "info",
+       "field": "pin_count"
+      },
+      {
+       "type": "readout",
+       "label": "GPIO 数量",
+       "source": "info",
+       "field": "gpio_count"
+      },
+      {
+       "type": "readout",
+       "label": "SVD 状态",
+       "source": "info",
+       "field": "svd_status"
+      },
+      {
+       "type": "readout",
+       "label": "寄存器数",
+       "source": "info",
+       "field": "registers"
+      }
+     ],
+     "subtitle": "封装引脚数来自 PDSC feature，GPIO 数量不是封装引脚数量。缺失的数据明确标注，不依据型号后缀猜测。",
+     "span": 12
+    },
+    {
+     "title": "内存布局",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "info",
+       "rows_field": "memory",
+       "columns": [
+        {
+         "field": "name",
+         "label": "名称"
+        },
+        {
+         "field": "id",
+         "label": "标识"
+        },
+        {
+         "field": "start_hex",
+         "label": "起始地址"
+        },
+        {
+         "field": "bytes",
+         "label": "字节数"
+        },
+        {
+         "field": "access",
+         "label": "权限"
+        }
+       ]
+      }
+     ],
+     "subtitle": "",
+     "span": 12
+    },
+    {
+     "title": "器件功能",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "info",
+       "rows_field": "features",
+       "columns": [
+        {
+         "field": "type",
+         "label": "类别"
+        },
+        {
+         "field": "n",
+         "label": "数量/最小"
+        },
+        {
+         "field": "m",
+         "label": "位宽/最大"
+        },
+        {
+         "field": "name",
+         "label": "说明"
+        }
+       ]
+      }
+     ],
+     "subtitle": "",
+     "span": 12
+    }
+   ]
+  },
+  {
+   "title": "烧录算法",
+   "sections": [
+    {
+     "title": "算法文件与覆盖范围",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "algorithms",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "name",
+         "label": "算法文件"
+        },
+        {
+         "field": "start",
+         "label": "Flash 起始"
+        },
+        {
+         "field": "bytes",
+         "label": "覆盖字节"
+        },
+        {
+         "field": "default",
+         "label": "默认"
+        },
+        {
+         "field": "style",
+         "label": "格式"
+        },
+        {
+         "field": "exists",
+         "label": "文件存在"
+        }
+       ]
+      }
+     ],
+     "subtitle": "列出 PDSC 继承后的算法及 Flash 区间。FLM 符号值可能是节内偏移，不能直接当作运行时入口；本插件不执行烧录。",
+     "span": 12
+    },
+    {
+     "title": "FLM 文件分析",
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "algorithm",
+       "label": "算法文件",
+       "options_from": {
+        "method": "algorithm_options",
+        "field": "algorithms"
+       }
+      },
+      {
+       "type": "button",
+       "label": "解析 FLM",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "inspect_algorithm",
+        "args": {
+         "name": "$form.algorithm"
+        }
+       },
+       "publish": "flm"
+      },
+      {
+       "type": "readout",
+       "label": "Flash 型号",
+       "source": "flm",
+       "field": "device_name"
+      },
+      {
+       "type": "readout",
+       "label": "Flash 起始",
+       "source": "flm",
+       "field": "flash_start"
+      },
+      {
+       "type": "readout",
+       "label": "Flash 字节",
+       "source": "flm",
+       "field": "flash_bytes"
+      },
+      {
+       "type": "readout",
+       "label": "页字节",
+       "source": "flm",
+       "field": "page_bytes"
+      },
+      {
+       "type": "table",
+       "source": "flm",
+       "rows_field": "functions",
+       "columns": [
+        {
+         "field": "name",
+         "label": "入口符号"
+        },
+        {
+         "field": "address",
+         "label": "ELF 符号值"
+        },
+        {
+         "field": "size",
+         "label": "代码字节"
+        }
+       ]
+      },
+      {
+       "type": "table",
+       "source": "flm",
+       "rows_field": "sectors",
+       "columns": [
+        {
+         "field": "size",
+         "label": "扇区字节"
+        },
+        {
+         "field": "offset",
+         "label": "Flash 内偏移"
+        }
+       ]
+      }
+     ],
+     "subtitle": "",
+     "span": 12
+    },
+    {
+     "title": "导出算法文件",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "flm_export_path",
+       "label": "输出路径",
+       "value": "",
+       "placeholder": "C:\\Export\\device.FLM",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导出 FLM",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "export_algorithm",
+        "args": {
+         "name": "$form.algorithm",
+         "path": "$form.flm_export_path"
+        }
+       },
+       "publish": "exported"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "exported",
+       "field": "path"
+      }
+     ],
+     "subtitle": "原样导出选中的算法文件，目标文件须不存在。",
+     "span": 12
+    }
+   ]
+  },
+  {
+   "title": "引脚功能",
+   "sections": [
+    {
+     "title": "数据来源",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "封装引脚数",
+       "source": "info",
+       "field": "pin_count"
+      },
+      {
+       "type": "readout",
+       "label": "逐引脚来源",
+       "source": "info",
+       "field": "pin_source"
+      },
+      {
+       "type": "readout",
+       "label": "引脚表条目",
+       "source": "info",
+       "field": "pin_rows"
+      }
+     ],
+     "subtitle": "CMSIS-Pack 不保证提供管脚编号和复用映射。没有数据时不将 GPIO 寄存器列表冒充封装引脚表。请选择与当前器件/封装匹配的厂商引脚数据。",
+     "span": 12
+    },
+    {
+     "title": "读取包内引脚文件",
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "pack_pin_file",
+       "label": "包内文件",
+       "options_from": {
+        "method": "pin_file_options",
+        "field": "files"
+       }
+      },
+      {
+       "type": "button",
+       "label": "读取引脚文件",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "import_pack_pins",
+        "args": {
+         "name": "$form.pack_pin_file"
+        }
+       },
+       "refresh": [
+        "pins",
+        "info"
+       ]
+      }
+     ],
+     "subtitle": "识别厂商 MCU XML 的 Pin/Signal 结构或标准列 CSV；不支持的格式会明确报错。",
+     "span": 12
+    },
+    {
+     "title": "补充引脚表",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "pins_path",
+       "label": "文件路径",
+       "value": "",
+       "placeholder": "CSV / 厂商 MCU XML",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导入引脚表",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "import_pins",
+        "args": {
+         "path": "$form.pins_path"
+        }
+       },
+       "refresh": [
+        "pins",
+        "info"
+       ]
+      }
+     ],
+     "subtitle": "CSV 列：number,name,functions，可选 type；XML 支持 Pin 的 Position/Name/Type 和 Signal Name。导入表不会自动写 GPIO 复用寄存器。",
+     "span": 12
+    },
+    {
+     "title": "引脚与复用功能",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pins",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "number",
+         "label": "管脚编号"
+        },
+        {
+         "field": "name",
+         "label": "引脚名称"
+        },
+        {
+         "field": "type",
+         "label": "类型"
+        },
+        {
+         "field": "functions",
+         "label": "功能 / 复用"
+        }
+       ]
+      }
+     ],
+     "subtitle": "",
+     "span": 12
+    }
+   ]
+  },
+  {
+   "title": "寄存器配置",
+   "sections": [
+    {
+     "title": "SVD 外设",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "SVD 状态",
+       "source": "info",
+       "field": "svd_status"
+      },
+      {
+       "type": "combo",
+       "id": "peripheral_choice",
+       "label": "选择外设",
+       "options_from": {
+        "method": "peripheral_options",
+        "field": "peripherals"
+       },
+       "init": {
+        "method": "info",
+        "field": "peripheral"
+       }
+      },
+      {
+       "type": "button",
+       "label": "打开外设",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "select_peripheral",
+        "args": {
+         "name": "$form.peripheral_choice"
+        }
+       },
+       "refresh": [
+        "registers",
+        "fields",
+        "info"
+       ]
+      }
+     ],
+     "subtitle": "显示 SVD 描述及离线值。只读寄存器、保留位、特殊读写副作用不允许修改；不会读写真实 MCU。",
+     "span": 12
+    },
+    {
+     "title": "寄存器列表",
+     "widgets": [
+      {
+       "type": "edit_table",
+       "source": "registers",
+       "rows_field": "rows",
+       "rev_field": "rev",
+       "key": [
+        "path"
+       ],
+       "write": "set_register",
+       "height": 410,
+       "also": [
+        "fields",
+        "config"
+       ],
+       "columns": [
+        {
+         "field": "name",
+         "label": "寄存器",
+         "width": 160
+        },
+        {
+         "field": "address",
+         "label": "地址",
+         "width": 130
+        },
+        {
+         "field": "size",
+         "label": "位宽",
+         "width": 60
+        },
+        {
+         "field": "access",
+         "label": "权限",
+         "width": 110
+        },
+        {
+         "field": "reset",
+         "label": "复位值",
+         "width": 120
+        },
+        {
+         "field": "value",
+         "label": "离线配置值",
+         "width": 140,
+         "editor": "text",
+         "mono": true,
+         "readonly_if": "readonly"
+        },
+        {
+         "field": "description",
+         "label": "描述",
+         "width": 300
+        }
+       ],
+       "row_actions": [
+        {
+         "label": "查看位域",
+         "method": "select_register"
+        },
+        {
+         "label": "还原复位值",
+         "method": "reset_register"
+        }
+       ]
+      }
+     ],
+     "subtitle": "双击“离线配置值”输入十六进制/十进制。选中行后点击“查看位域”，或右键使用行操作。",
+     "span": 12
+    },
+    {
+     "title": "位域配置",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "当前寄存器",
+       "source": "fields",
+       "field": "register"
+      },
+      {
+       "type": "edit_table",
+       "source": "fields",
+       "rows_field": "rows",
+       "rev_field": "rev",
+       "key": [
+        "path",
+        "bit_name"
+       ],
+       "write": "set_field",
+       "height": 320,
+       "also": [
+        "registers",
+        "config"
+       ],
+       "columns": [
+        {
+         "field": "bit_name",
+         "label": "位域",
+         "width": 150
+        },
+        {
+         "field": "bits",
+         "label": "位位置",
+         "width": 80
+        },
+        {
+         "field": "access",
+         "label": "权限",
+         "width": 110
+        },
+        {
+         "field": "value",
+         "label": "离线值",
+         "width": 100,
+         "editor": "text",
+         "readonly_if": "readonly"
+        },
+        {
+         "field": "enums",
+         "label": "枚举",
+         "width": 330
+        },
+        {
+         "field": "description",
+         "label": "描述",
+         "width": 280
+        }
+       ]
+      }
+     ],
+     "subtitle": "显示位位置、访问属性和枚举。可修改普通可写位域，修改会同步到寄存器配置值。",
+     "span": 12
+    }
+   ]
+  },
+  {
+   "title": "配置导出",
+   "sections": [
+    {
+     "title": "已配置寄存器",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "配置数量",
+       "source": "config",
+       "field": "count"
+      },
+      {
+       "type": "table",
+       "source": "config",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "path",
+         "label": "寄存器"
+        },
+        {
+         "field": "address",
+         "label": "地址"
+        },
+        {
+         "field": "value",
+         "label": "配置值"
+        },
+        {
+         "field": "mask",
+         "label": "配置掩码"
+        }
+       ]
+      }
+     ],
+     "subtitle": "仅导出明确编辑过的寄存器。未配置项不生成写操作。",
+     "span": 12
+    },
+    {
+     "title": "导出离线初始化方案",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "config_path",
+       "label": "输出路径",
+       "value": "",
+       "placeholder": "C:\\Export\\mcu_config.json",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "config_format",
+       "label": "格式",
+       "options": [
+        "json",
+        "c"
+       ],
+       "value": "json"
+      },
+      {
+       "type": "button",
+       "label": "导出配置",
+       "fit": true,
+       "style": "primary",
+       "action": {
+        "method": "export_configuration",
+        "args": {
+         "path": "$form.config_path",
+         "format": "$form.config_format"
+        }
+       },
+       "publish": "exported"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "exported",
+       "field": "path"
+      }
+     ],
+     "subtitle": "JSON 保留器件、SVD、地址、值和掩码；C 为待审阅的初始化代码。读写寄存器按掩码读改写，只写寄存器直接写值；不自动执行，不覆盖已有文件。",
+     "span": 12
+    }
+   ]
+  }
+ ]
+}

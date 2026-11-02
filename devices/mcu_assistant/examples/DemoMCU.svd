@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<device schemaVersion="1.3">
+  <name>DemoMCU</name><description>教学示例</description><addressUnitBits>8</addressUnitBits><width>32</width>
+  <size>32</size><access>read-write</access><resetValue>0</resetValue>
+  <peripherals><peripheral><name>GPIOA</name><description>General purpose I/O</description><baseAddress>0x40020000</baseAddress>
+    <registers>
+      <register><name>MODER</name><description>GPIO mode register</description><addressOffset>0</addressOffset>
+        <fields><field><dim>4</dim><dimIncrement>2</dimIncrement><name>MODE%s</name><description>Pin mode</description><bitOffset>0</bitOffset><bitWidth>2</bitWidth>
+          <enumeratedValues><enumeratedValue><name>Input</name><value>0</value></enumeratedValue><enumeratedValue><name>Output</name><value>1</value></enumeratedValue><enumeratedValue><name>Alternate</name><value>2</value></enumeratedValue><enumeratedValue><name>Analog</name><value>3</value></enumeratedValue></enumeratedValues>
+        </field></fields>
+      </register>
+      <register><name>IDR</name><description>Input data, read-only</description><addressOffset>16</addressOffset><access>read-only</access><fields><field><name>DATA</name><bitRange>[3:0]</bitRange></field></fields></register>
+      <register><name>ODR</name><description>Output data</description><addressOffset>20</addressOffset><fields><field><name>DATA</name><lsb>0</lsb><msb>3</msb></field></fields></register>
+    </registers>
+  </peripheral></peripherals>
+</device>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package schemaVersion="1.7.2">
+  <vendor>Example</vendor><name>DemoMCU_DFP</name><description>教学示例，并非真实 MCU</description>
+  <releases><release version="1.0.0" date="2026-11-02">Demo</release></releases>
+  <devices><family Dfamily="DemoMCU" Dvendor="Example">
+    <processor Dcore="Cortex-M0"/><debug svd="DemoMCU.svd"/>
+    <device Dname="DemoMCU8">
+      <feature type="QFN" n="8"/><feature type="IOs" n="6"/>
+      <memory name="FLASH" start="0x08000000" size="0x10000" access="rx"/>
+      <memory name="RAM" start="0x20000000" size="0x2000" access="rwx"/>
+      <algorithm name="Flash/Demo.FLM" start="0x08000000" size="0x10000" default="1"/>
+    </device>
+  </family></devices>
+</package>

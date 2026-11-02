@@ -73,6 +73,190 @@
  ],
  "tabs": [
   {
+   "title": "项目管理",
+   "sections": [
+    {
+     "title": "当前工程",
+     "span": 12,
+     "subtitle": "各编辑页的修改直接保存到当前工程。导出后，在 NI Digital Pattern Editor 中打开 .digiproj 文件。",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "工程",
+       "source": "pe_info",
+       "field": "name"
+      },
+      {
+       "type": "readout",
+       "label": "目录",
+       "source": "pe_info",
+       "field": "project"
+      },
+      {
+       "type": "combo",
+       "id": "project_existing",
+       "label": "切换工程",
+       "options_from": {
+        "method": "pe.project_list",
+        "field": "projects"
+       }
+      },
+      {
+       "type": "button",
+       "label": "打开工程",
+       "style": "secondary",
+       "action": {
+        "method": "pe.project_open",
+        "args": {
+         "path": "$form.project_existing"
+        }
+       },
+       "refresh": [
+        "pe_sum",
+        "pe_info",
+        "pe_vec",
+        "pe_lv",
+        "pe_ts",
+        "pe_pins",
+        "pe_edges",
+        "pe_pedges",
+        "pe_inst",
+        "pe_tree",
+        "pe_spec_rows"
+       ],
+       "reload_page": true,
+       "fit": true
+      }
+     ]
+    },
+    {
+     "title": "新建工程",
+     "span": 6,
+     "subtitle": "生成 8 个引脚、规格、电平、时序和 main 向量表。名称使用字母、数字和下划线。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "project_name",
+       "label": "工程名称",
+       "value": "",
+       "placeholder": "例如 MyDigitalProject",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "新建并打开",
+       "style": "primary",
+       "action": {
+        "method": "editor_project_new",
+        "args": {
+         "name": "$form.project_name"
+        }
+       },
+       "refresh": [
+        "pe_sum",
+        "pe_info",
+        "pe_vec",
+        "pe_lv",
+        "pe_ts",
+        "pe_pins",
+        "pe_edges",
+        "pe_pedges",
+        "pe_inst",
+        "pe_tree",
+        "pe_spec_rows"
+       ],
+       "reload_page": true,
+       "fit": true
+      }
+     ]
+    },
+    {
+     "title": "导入工程",
+     "span": 6,
+     "subtitle": "填写 NI .digiproj 文件完整路径，复制到本地工程库；原工程保持不变。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "project_import_path",
+       "label": "工程文件",
+       "value": "",
+       "placeholder": "C:\\Projects\\Example\\Example.digiproj",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "project_import_name",
+       "label": "本地名称",
+       "value": "",
+       "placeholder": "例如 ImportedProject",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导入并打开",
+       "style": "secondary",
+       "action": {
+        "method": "editor_project_import",
+        "args": {
+         "path": "$form.project_import_path",
+         "name": "$form.project_import_name"
+        }
+       },
+       "refresh": [
+        "pe_sum",
+        "pe_info",
+        "pe_vec",
+        "pe_lv",
+        "pe_ts",
+        "pe_pins",
+        "pe_edges",
+        "pe_pedges",
+        "pe_inst",
+        "pe_tree",
+        "pe_spec_rows"
+       ],
+       "reload_page": true,
+       "fit": true
+      }
+     ]
+    },
+    {
+     "title": "导出 Digital Pattern Editor 工程",
+     "span": 12,
+     "subtitle": "导出完整工程目录和 .digiproj，包含引脚映射、规格、电平、时序及二进制向量。目标目录须不存在，避免覆盖已有文件。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "project_export_folder",
+       "label": "导出目录",
+       "value": "",
+       "placeholder": "C:\\Projects\\ExportedProject",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "label": "导出工程",
+       "style": "primary",
+       "action": {
+        "method": "editor_project_export",
+        "args": {
+         "folder": "$form.project_export_folder"
+        }
+       },
+       "publish": "project_result",
+       "fit": true
+      },
+      {
+       "type": "readout",
+       "label": "导出文件",
+       "source": "project_result",
+       "field": "digiproj"
+      }
+     ]
+    }
+   ]
+  },
+  {
    "title": "PPMU",
    "sections": [
     {

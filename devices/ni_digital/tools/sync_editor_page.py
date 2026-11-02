@@ -118,6 +118,29 @@ def main():
             s["interval_ms"] = max(s.get("interval_ms", 2000), 1000)
 
     page["tabs"] = [t for t in page["tabs"] if t["title"] in KEEP_TABS]
+    refresh = [PREFIX + s for s in SOURCES + ["tree", "spec_rows"]]
+    page["tabs"].insert(0, {"title": "项目管理", "sections": [
+        {"title": "当前工程", "span": 12, "subtitle": "各编辑页的修改直接保存到当前工程。导出后，在 NI Digital Pattern Editor 中打开 .digiproj 文件。", "widgets": [
+            {"type": "readout", "label": "工程", "source": "pe_info", "field": "name"},
+            {"type": "readout", "label": "目录", "source": "pe_info", "field": "project"},
+            {"type": "combo", "id": "project_existing", "label": "切换工程", "options_from": {"method": "pe.project_list", "field": "projects"}},
+            button("打开工程", "pe.project_open", {"path": "$form.project_existing"}, refresh=refresh, reload_page=True),
+        ]},
+        {"title": "新建工程", "span": 6, "subtitle": "生成 8 个引脚、规格、电平、时序和 main 向量表。名称使用字母、数字和下划线。", "widgets": [
+            text("project_name", "工程名称", "例如 MyDigitalProject"),
+            button("新建并打开", "editor_project_new", {"name": "$form.project_name"}, style="primary", refresh=refresh, reload_page=True),
+        ]},
+        {"title": "导入工程", "span": 6, "subtitle": "填写 NI .digiproj 文件完整路径，复制到本地工程库；原工程保持不变。", "widgets": [
+            text("project_import_path", "工程文件", "C:\\Projects\\Example\\Example.digiproj"),
+            text("project_import_name", "本地名称", "例如 ImportedProject"),
+            button("导入并打开", "editor_project_import", {"path": "$form.project_import_path", "name": "$form.project_import_name"}, refresh=refresh, reload_page=True),
+        ]},
+        {"title": "导出 Digital Pattern Editor 工程", "span": 12, "subtitle": "导出完整工程目录和 .digiproj，包含引脚映射、规格、电平、时序及二进制向量。目标目录须不存在，避免覆盖已有文件。", "widgets": [
+            text("project_export_folder", "导出目录", "C:\\Projects\\ExportedProject"),
+            button("导出工程", "editor_project_export", {"folder": "$form.project_export_folder"}, style="primary", publish="project_result"),
+            {"type": "readout", "label": "导出文件", "source": "project_result", "field": "digiproj"},
+        ]},
+    ]})
 
     def section(tab, title):
         return json.loads(json.dumps(next(s for s in tabs[tab]["sections"] if s["title"] == title)))

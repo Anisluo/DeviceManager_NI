@@ -78,7 +78,14 @@ private:
             QString symbol, timeset;
             bool compareDefined = false;
         };
-        QString name, note;
+        QString name, note, unit = QStringLiteral("V");
+        struct Annotation { double t = 0, end = 0; QString label, detail, status; };
+        std::vector<Annotation> annotations;
+        struct Bit { double t = 0, end = 0, sample = 0; int value = 0; QString label, field; };
+        std::vector<Bit> bits;
+        bool bus = false;
+        bool showEdges = false;
+        std::vector<double> samples;
         double lo = 0, hi = 1;
         std::vector<double> t, v;
         std::vector<State> states;

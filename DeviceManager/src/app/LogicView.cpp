@@ -39,6 +39,20 @@ void LogicView::setData(const QVariant& lanesV, double tEnd)
         Lane l;
         l.name = m.value("name").toString();
         l.note = m.value("note").toString();
+        if (m.contains("unit")) l.unit = m.value("unit").toString();
+        l.bus = m.value("bus").toBool();
+        l.showEdges = m.value("show_edges").toBool();
+        l.samples = toDoubles(m.value("samples"));
+        for (const auto& value : unwrapList(m.value("bits"))) {
+            const auto b = unwrapMap(value);
+            l.bits.push_back({b.value("t").toDouble(), b.value("end").toDouble(), b.value("sample").toDouble(),
+                              b.value("value").toInt(), b.value("label").toString(), b.value("field").toString()});
+        }
+        for (const auto& value : unwrapList(m.value("annotations"))) {
+            const auto a = unwrapMap(value);
+            l.annotations.push_back({a.value("t").toDouble(), a.value("end").toDouble(),
+                                    a.value("label").toString(), a.value("detail").toString(), a.value("status").toString()});
+        }
         l.lo = m.value("lo").toDouble();
         l.hi = m.value("hi").toDouble();
         l.t = toDoubles(m.value("t"));
@@ -217,8 +231,44 @@ void LogicView::paint(QPainter* p)
         p->drawText(QRectF(6, mid + 1, 106, 18), Qt::AlignLeft | Qt::AlignVCenter,
                     fm.elidedText(l.note, Qt::ElideRight, 106));
         p->setPen(m_muted);
-        p->drawText(QRectF(kLabels - 60, yHi - 9, 54, 18), Qt::AlignRight | Qt::AlignVCenter, si(l.hi, "V", 3));
-        p->drawText(QRectF(kLabels - 60, yLo - 9, 54, 18), Qt::AlignRight | Qt::AlignVCenter, si(l.lo, "V", 3));
+        if (!l.bus) {
+            p->drawText(QRectF(kLabels - 60, yHi - 9, 54, 18), Qt::AlignRight | Qt::AlignVCenter, si(l.hi, l.unit, 3));
+            p->drawText(QRectF(kLabels - 60, yLo - 9, 54, 18), Qt::AlignRight | Qt::AlignVCenter, si(l.lo, l.unit, 3));
+        }
+        p->save();
+        p->setClipRect(QRectF(r.left(), top, r.width(), laneH));
+        for (const auto& a : l.annotations) {
+            if (a.end <= m_t0 || a.t >= m_t1) continue;
+            const double left = std::max(r.left(), toPx(a.t)), right = std::min(r.right(), toPx(a.end));
+            const QRectF box(left, mid - 10, std::max(1.0, right - left), 20);
+            QColor color = a.status == QLatin1String("error") ? QColor("#C54747") : laneColor(int(i));
+            QColor fill = color; fill.setAlpha(35);
+            p->setBrush(fill); p->setPen(QPen(color, 1));
+            p->drawRoundedRect(box, 3, 3);
+            if (box.width() > 22) p->drawText(box.adjusted(3, 0, -3, 0), Qt::AlignCenter,
+                                             fm.elidedText(a.label, Qt::ElideRight, box.width() - 6));
+        }
+        for (const auto& b : l.bits) {
+            if (b.end <= m_t0 || b.t >= m_t1) continue;
+            const double x0 = toPx(b.t), x1 = toPx(b.end), sx = toPx(b.sample);
+            if (x1-x0 < 8) continue;
+            p->setBrush(Qt::NoBrush);
+            p->setPen(QPen(laneColor(int(i)), 1, Qt::DotLine));
+            p->drawLine(QLineF(x0, mid-12, x0, mid+30));
+            if (x1-x0 >= 23) {
+                const QString label = b.label + QLatin1Char('=') + QString::number(b.value);
+                p->setPen(m_text);
+                p->drawText(QRectF(x0+1, mid+12, x1-x0-2, 17), Qt::AlignCenter,
+                            fm.elidedText(label, Qt::ElideRight, x1-x0-2));
+            }
+            const double sy = toPy(b.value);
+            p->setPen(QPen(laneColor(int(i)), 1));
+            p->setBrush(laneColor(int(i)));
+            p->drawPolygon(QPolygonF{QPointF(sx, sy), QPointF(sx-3, sy+(b.value ? 6 : -6)),
+                                     QPointF(sx+3, sy+(b.value ? 6 : -6))});
+        }
+        p->restore();
+        if (l.bus) continue;
 
         if (l.t.empty()) continue;
         p->save();
@@ -251,6 +301,20 @@ void LogicView::paint(QPainter* p)
         }
         pts.emplace_back(end, y);
         p->drawPolyline(pts.data(), int(pts.size()));
+        if (l.showEdges) {
+            for (size_t j = 1; j < l.t.size(); ++j) {
+                if (l.t[j] < m_t0 || l.t[j] > m_t1 || l.v[j] == l.v[j-1]) continue;
+                const bool rising = l.v[j] > l.v[j-1];
+                const double ex = toPx(l.t[j]), direction = rising ? -1 : 1;
+                const double tolerance = std::max(1e-18, m_tEnd * 1e-12);
+                const auto found = std::lower_bound(l.samples.begin(), l.samples.end(), l.t[j]-tolerance);
+                if (found == l.samples.end() || std::abs(*found-l.t[j]) > tolerance) continue;
+                const QColor color("#C68A16");
+                p->setPen(QPen(color, 1)); p->setBrush(color);
+                p->drawPolygon(QPolygonF{QPointF(ex, mid+direction*4),
+                    QPointF(ex-3, mid-direction*2), QPointF(ex+3, mid-direction*2)});
+            }
+        }
         p->restore();
         const QColor compare("#6089B0");
         for (const auto& state : l.states) {
@@ -434,6 +498,20 @@ void LogicView::hoverMoveEvent(QHoverEvent* e)
     if (r.contains(m_hover) && !m_lanes.empty()) {
         const auto& lane = m_lanes[std::min(m_lanes.size() - 1, size_t((m_hover.y() - r.top()) / (r.height() / m_lanes.size())))];
         const double time = fromPx(m_hover.x());
+        for (const auto& b : lane.bits) {
+            if (time < b.t || time >= b.end) continue;
+            tip = QStringLiteral("%1 · %2\n%3 = %4\n位区间 %5 … %6\n采样时刻 %7")
+                .arg(lane.name, b.field, b.label).arg(b.value)
+                .arg(si(b.t, "s", 6), si(b.end, "s", 6), si(b.sample, "s", 6));
+            break;
+        }
+        for (const auto& a : lane.annotations) {
+            if (!tip.isEmpty()) break;
+            if (time < a.t || time >= a.end) continue;
+            tip = QStringLiteral("%1 · %2\n%3\n%4 … %5 · %6")
+                .arg(lane.name, a.label, a.detail, si(a.t, "s", 6), si(a.end, "s", 6), a.status);
+            break;
+        }
         for (const auto& s : lane.states) {
             if (time < s.t || time >= s.end) continue;
             tip = QStringLiteral("%1 · v%2 · %3 · %4").arg(lane.name).arg(s.vector).arg(s.symbol, s.timeset);
@@ -447,6 +525,23 @@ void LogicView::hoverMoveEvent(QHoverEvent* e)
             else if (s.symbol == "0" || s.symbol == "1") tip += QStringLiteral("\n驱动输出");
             else tip += QStringLiteral("\n非驱动状态；仅显示状态符号");
             break;
+        }
+        if (lane.showEdges && !lane.bus) {
+            double nearest = 7;
+            for (size_t j = 1; j < lane.t.size(); ++j) {
+                const double distance = std::abs(toPx(lane.t[j])-m_hover.x());
+                if (distance > nearest || lane.v[j] == lane.v[j-1]) continue;
+                nearest = distance;
+                const bool rising = lane.v[j] > lane.v[j-1];
+                const double tolerance = std::max(1e-18, m_tEnd*1e-12);
+                const auto found = std::lower_bound(lane.samples.begin(), lane.samples.end(), lane.t[j]-tolerance);
+                const bool sampling = found != lane.samples.end() && std::abs(*found-lane.t[j]) <= tolerance;
+                if (!sampling) continue;
+                tip = QStringLiteral("%1 · %2%3\nt = %4\n%5 → %6")
+                    .arg(lane.name, rising ? QStringLiteral("上升沿 ↑") : QStringLiteral("下降沿 ↓"),
+                         sampling ? QStringLiteral(" · 有效采样沿") : QString())
+                    .arg(si(lane.t[j], "s", 8)).arg(lane.v[j-1]).arg(lane.v[j]);
+            }
         }
     }
     if (tip != m_hoverText) { m_hoverText = tip; emit hoverTextChanged(); }

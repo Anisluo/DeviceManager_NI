@@ -1,0 +1,1603 @@
+{
+ "title": "通信协议仿真",
+ "subtitle": "逻辑分析仪式时序 · 字段解码 · 故障场景 · VCD / JSON 导出 · 无需硬件",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "swd_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "SWD"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "spi_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "SPI"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "i2c_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "I2C"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "pcie_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "PCIE"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "axi_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "AXI"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "uart_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "UART"
+   },
+   "interval_ms": 2000
+  },
+  {
+   "id": "can_capture",
+   "method": "capture",
+   "args": {
+    "protocol": "CAN"
+   },
+   "interval_ms": 2000
+  }
+ ],
+ "tabs": [
+  {
+   "title": "SWD",
+   "sections": [
+    {
+     "title": "SWD 参数",
+     "subtitle": "请求 / 响应 / 周转 / 校验。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "swd_frequency",
+       "label": "时钟频率",
+       "value": 1000000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "swd_operation",
+       "label": "操作",
+       "options": [
+        "read",
+        "write"
+       ],
+       "value": "read"
+      },
+      {
+       "type": "combo",
+       "id": "swd_ap",
+       "label": "APnDP",
+       "options": [
+        0,
+        1
+       ],
+       "value": 0
+      },
+      {
+       "type": "combo",
+       "id": "swd_address",
+       "label": "寄存器地址",
+       "options": [
+        0,
+        4,
+        8,
+        12
+       ],
+       "value": 0
+      },
+      {
+       "type": "text",
+       "id": "swd_value",
+       "label": "32 位数据",
+       "value": "0x2BA01477",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "swd_ack",
+       "label": "ACK",
+       "options": [
+        "OK",
+        "WAIT",
+        "FAULT"
+       ],
+       "value": "OK"
+      },
+      {
+       "type": "combo",
+       "id": "swd_line_reset",
+       "label": "线路复位",
+       "options": [
+        1,
+        0
+       ],
+       "value": 1
+      },
+      {
+       "type": "combo",
+       "id": "swd_parity_error",
+       "label": "校验错误",
+       "options": [
+        0,
+        1
+       ],
+       "value": 0
+      },
+      {
+       "type": "button",
+       "id": "swd_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "SWD",
+         "frequency": "$form.swd_frequency",
+         "options": {
+          "operation": "$form.swd_operation",
+          "ap": "$form.swd_ap",
+          "address": "$form.swd_address",
+          "value": "$form.swd_value",
+          "ack": "$form.swd_ack",
+          "line_reset": "$form.swd_line_reset",
+          "parity_error": "$form.swd_parity_error"
+         }
+        }
+       },
+       "publish": "swd_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "单次 DP/AP 传输；从 SWD 模式开始，不含 JTAG 切换及 AP posted-read 管线。HOST_OE 区分主机驱动/释放，TURN 显示为虚线。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "swd_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "swd_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "swd_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "swd_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "swd_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "swd_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "swd_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "swd_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "SWD",
+         "path": "$form.swd_export_path",
+         "format": "$form.swd_format"
+        }
+       },
+       "publish": "swd_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "swd_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "SPI",
+   "sections": [
+    {
+     "title": "SPI 参数",
+     "subtitle": "全双工 · 四种 CPOL/CPHA 模式。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "spi_frequency",
+       "label": "时钟频率",
+       "value": 1000000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "spi_mode",
+       "label": "SPI 模式",
+       "options": [
+        0,
+        1,
+        2,
+        3
+       ],
+       "value": 0
+      },
+      {
+       "type": "combo",
+       "id": "spi_order",
+       "label": "位序",
+       "options": [
+        "MSB",
+        "LSB"
+       ],
+       "value": "MSB"
+      },
+      {
+       "type": "text",
+       "id": "spi_data",
+       "label": "MOSI 数据",
+       "value": "9F 00 00 00",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "spi_response",
+       "label": "MISO 响应",
+       "value": "00 EF 40 18",
+       "mono": true
+      },
+      {
+       "type": "button",
+       "id": "spi_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "SPI",
+         "frequency": "$form.spi_frequency",
+         "options": {
+          "mode": "$form.spi_mode",
+          "order": "$form.spi_order",
+          "data": "$form.spi_data",
+          "response": "$form.spi_response"
+         }
+        }
+       },
+       "publish": "spi_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "四种 CPOL/CPHA 模式，MSB/LSB 位序，发送与响应须等长。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "spi_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "spi_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "spi_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "spi_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "spi_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "spi_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "spi_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "spi_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "SPI",
+         "path": "$form.spi_export_path",
+         "format": "$form.spi_format"
+        }
+       },
+       "publish": "spi_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "spi_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "I²C",
+   "sections": [
+    {
+     "title": "I2C 参数",
+     "subtitle": "7 位地址 · ACK/NACK · 时钟延展。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "i2c_frequency",
+       "label": "时钟频率",
+       "value": 100000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "i2c_operation",
+       "label": "操作",
+       "options": [
+        "write",
+        "read"
+       ],
+       "value": "write"
+      },
+      {
+       "type": "text",
+       "id": "i2c_address",
+       "label": "7 位地址",
+       "value": "0x50",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "i2c_data",
+       "label": "数据",
+       "value": "00 A5 5A",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "i2c_nack_at",
+       "label": "NACK 序号",
+       "value": -1,
+       "min": -1,
+       "max": 64,
+       "unit": "",
+       "decimals": 0
+      },
+      {
+       "type": "number",
+       "id": "i2c_stretch",
+       "label": "延展周期",
+       "value": 0,
+       "min": 0,
+       "max": 100,
+       "unit": "",
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "id": "i2c_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "I2C",
+         "frequency": "$form.i2c_frequency",
+         "options": {
+          "operation": "$form.i2c_operation",
+          "address": "$form.i2c_address",
+          "data": "$form.i2c_data",
+          "nack_at": "$form.i2c_nack_at",
+          "stretch": "$form.i2c_stretch"
+         }
+        }
+       },
+       "publish": "i2c_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "单主机、7 位地址。NACK 序号 -1=不注入，0=地址，1 起为数据。支持时钟延展，不含多主机仲裁。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "i2c_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "i2c_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "i2c_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "i2c_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "i2c_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "i2c_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "i2c_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "i2c_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "I2C",
+         "path": "$form.i2c_export_path",
+         "format": "$form.i2c_format"
+        }
+       },
+       "publish": "i2c_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "i2c_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "PCIe · TLP",
+   "sections": [
+    {
+     "title": "PCIE 参数",
+     "subtitle": "TLP 事务接口示意 · 非串行物理层。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "pcie_frequency",
+       "label": "时钟频率",
+       "value": 125000000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "pcie_operation",
+       "label": "请求类型",
+       "options": [
+        "MRd",
+        "MWr"
+       ],
+       "value": "MRd"
+      },
+      {
+       "type": "text",
+       "id": "pcie_address",
+       "label": "32 位地址",
+       "value": "0x1000",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "pcie_data",
+       "label": "负载/读回",
+       "value": "11 22 33 44",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "pcie_latency",
+       "label": "完成延迟",
+       "value": 8,
+       "min": 1,
+       "max": 100,
+       "unit": "",
+       "decimals": 0
+      },
+      {
+       "type": "button",
+       "id": "pcie_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "PCIE",
+         "frequency": "$form.pcie_frequency",
+         "options": {
+          "operation": "$form.pcie_operation",
+          "address": "$form.pcie_address",
+          "data": "$form.pcie_data",
+          "latency": "$form.pcie_latency"
+         }
+        }
+       },
+       "publish": "pcie_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "TLP 事务接口，USER_CLK 按 32 位流节拍示意。支持 MRd / MWr 和 CplD；不含 LTSSM、DLLP、串行编码、LCRC 或物理差分信号。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "pcie_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "pcie_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "pcie_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "pcie_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "pcie_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "pcie_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "pcie_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "pcie_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "PCIE",
+         "path": "$form.pcie_export_path",
+         "format": "$form.pcie_format"
+        }
+       },
+       "publish": "pcie_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "pcie_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "AXI",
+   "sections": [
+    {
+     "title": "AXI 参数",
+     "subtitle": "AXI4 · 32 位 INCR burst · VALID/READY 背压。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "axi_frequency",
+       "label": "时钟频率",
+       "value": 50000000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "axi_operation",
+       "label": "操作",
+       "options": [
+        "write",
+        "read"
+       ],
+       "value": "write"
+      },
+      {
+       "type": "text",
+       "id": "axi_address",
+       "label": "起始地址",
+       "value": "0x40000000",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "axi_data",
+       "label": "32 位字",
+       "value": "12345678 89ABCDEF",
+       "mono": true
+      },
+      {
+       "type": "number",
+       "id": "axi_stall",
+       "label": "背压周期",
+       "value": 2,
+       "min": 0,
+       "max": 16,
+       "unit": "",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "axi_response",
+       "label": "响应",
+       "options": [
+        "OKAY",
+        "SLVERR",
+        "DECERR"
+       ],
+       "value": "OKAY"
+      },
+      {
+       "type": "button",
+       "id": "axi_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "AXI",
+         "frequency": "$form.axi_frequency",
+         "options": {
+          "operation": "$form.axi_operation",
+          "address": "$form.axi_address",
+          "data": "$form.axi_data",
+          "stall": "$form.axi_stall",
+          "response": "$form.axi_response"
+         }
+        }
+       },
+       "publish": "axi_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "AXI4 单 ID、32 位 INCR burst，1–16 拍；地址、数据、响应顺序执行，可设背压；不含并发及乱序。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "axi_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "axi_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "axi_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "axi_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "axi_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "axi_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "axi_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "axi_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "AXI",
+         "path": "$form.axi_export_path",
+         "format": "$form.axi_format"
+        }
+       },
+       "publish": "axi_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "axi_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "UART",
+   "sections": [
+    {
+     "title": "UART 参数",
+     "subtitle": "异步串口 · 起始位 / 数据 / 校验 / 停止位。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "uart_frequency",
+       "label": "波特率",
+       "value": 115200,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "text",
+       "id": "uart_data",
+       "label": "发送字节",
+       "value": "48 65 6C 6C 6F",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "uart_data_bits",
+       "label": "数据位",
+       "options": [
+        8,
+        7,
+        6,
+        5
+       ],
+       "value": 8
+      },
+      {
+       "type": "combo",
+       "id": "uart_parity",
+       "label": "校验",
+       "options": [
+        "none",
+        "even",
+        "odd"
+       ],
+       "value": "none"
+      },
+      {
+       "type": "combo",
+       "id": "uart_stop_bits",
+       "label": "停止位",
+       "options": [
+        1,
+        2
+       ],
+       "value": 1
+      },
+      {
+       "type": "combo",
+       "id": "uart_fault",
+       "label": "故障注入",
+       "options": [
+        "none",
+        "parity",
+        "stop"
+       ],
+       "value": "none"
+      },
+      {
+       "type": "button",
+       "id": "uart_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "UART",
+         "frequency": "$form.uart_frequency",
+         "options": {
+          "data": "$form.uart_data",
+          "data_bits": "$form.uart_data_bits",
+          "parity": "$form.uart_parity",
+          "stop_bits": "$form.uart_stop_bits",
+          "fault": "$form.uart_fault"
+         }
+        }
+       },
+       "publish": "uart_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "空闲高、LSB 优先，5–8 数据位，奇偶校验，1/2 停止位；故障注入只影响首帧。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "uart_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "uart_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "uart_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "uart_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "uart_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "uart_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "uart_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "uart_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "UART",
+         "path": "$form.uart_export_path",
+         "format": "$form.uart_format"
+        }
+       },
+       "publish": "uart_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "uart_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "CAN",
+   "sections": [
+    {
+     "title": "CAN 参数",
+     "subtitle": "Classic CAN 2.0A · CRC-15 / 位填充 / ACK。字节按十六进制输入，地址用 0x 前缀。修改参数后点“仿真”。",
+     "span": 5,
+     "widgets": [
+      {
+       "type": "number",
+       "id": "can_frequency",
+       "label": "波特率",
+       "value": 500000,
+       "min": 1,
+       "max": 1000000000,
+       "unit": "Hz",
+       "decimals": 0
+      },
+      {
+       "type": "text",
+       "id": "can_identifier",
+       "label": "11 位 ID",
+       "value": "0x123",
+       "mono": true
+      },
+      {
+       "type": "text",
+       "id": "can_data",
+       "label": "数据 1–8B",
+       "value": "11 22 33 44",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "can_ack",
+       "label": "接收方 ACK",
+       "options": [
+        1,
+        0
+       ],
+       "value": 1
+      },
+      {
+       "type": "combo",
+       "id": "can_crc_error",
+       "label": "CRC 错误",
+       "options": [
+        0,
+        1
+       ],
+       "value": 0
+      },
+      {
+       "type": "button",
+       "id": "can_simulate",
+       "label": "仿真",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "simulate",
+        "args": {
+         "protocol": "CAN",
+         "frequency": "$form.can_frequency",
+         "options": {
+          "identifier": "$form.can_identifier",
+          "data": "$form.can_data",
+          "ack": "$form.can_ack",
+          "crc_error": "$form.can_crc_error"
+         }
+        }
+       },
+       "publish": "can_capture"
+      }
+     ]
+    },
+    {
+     "title": "仿真信息",
+     "subtitle": "Classic CAN 2.0A，11 位 ID、1–8 字节数据帧、CRC-15、位填充与 ACK；不含 CAN FD、多节点仲裁或差分电压。",
+     "span": 7,
+     "widgets": [
+      {
+       "type": "readout",
+       "source": "can_capture",
+       "field": "duration",
+       "label": "总时长",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "source": "can_capture",
+       "field": "event_count",
+       "label": "解码字段"
+      },
+      {
+       "type": "readout",
+       "source": "can_capture",
+       "field": "error_count",
+       "label": "异常字段"
+      },
+      {
+       "type": "readout",
+       "source": "can_capture",
+       "field": "description",
+       "label": "模型范围"
+      }
+     ]
+    },
+    {
+     "title": "时序与协议解码",
+     "span": 12,
+     "subtitle": "滚轮缩放，左键框选，右键拖动平移，双击显示全部。顶部标尺左/右键放置 C1/C2，悬停字段查看详情。",
+     "widgets": [
+      {
+       "type": "logic",
+       "source": "can_capture",
+       "legend": "小三角仅标记当前协议配置的有效采样沿，无边沿文字；悬停查看时刻。方框为协议字段，红色为异常。SPI/UART/I²C/SWD 显示位名=值、位边界和三角形采样点。PCIe 页为 TLP 事务接口示意。"
+      }
+     ]
+    },
+    {
+     "title": "字段记录",
+     "span": 12,
+     "widgets": [
+      {
+       "type": "table",
+       "source": "can_capture",
+       "rows_field": "rows",
+       "columns": [
+        {
+         "field": "time",
+         "label": "开始",
+         "unit": "s"
+        },
+        {
+         "field": "duration",
+         "label": "持续",
+         "unit": "s"
+        },
+        {
+         "field": "channel",
+         "label": "通道"
+        },
+        {
+         "field": "label",
+         "label": "字段"
+        },
+        {
+         "field": "status",
+         "label": "状态",
+         "tones": {
+          "error": "error"
+         }
+        },
+        {
+         "field": "detail",
+         "label": "内容 / 方向"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "title": "导出本次仿真",
+     "span": 12,
+     "subtitle": "VCD 可供 GTKWave 等波形工具读取，JSON 保留参数、波形和解码。目标文件须不存在；PCIe 包字段保存在 JSON 中。",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "can_export_path",
+       "label": "文件路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "can_format",
+       "label": "格式",
+       "options": [
+        "vcd",
+        "json"
+       ],
+       "value": "vcd"
+      },
+      {
+       "type": "button",
+       "label": "导出",
+       "fit": true,
+       "style": "secondary",
+       "action": {
+        "method": "export",
+        "args": {
+         "protocol": "CAN",
+         "path": "$form.can_export_path",
+         "format": "$form.can_format"
+        }
+       },
+       "publish": "can_export"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "can_export",
+       "field": "path"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -20,6 +20,7 @@ from dm.plugin import Plugin, PluginError, method, to_json, E_FAIL, E_HW, E_STAT
 import swd as swdlib
 from driver_backend import DriverBackend
 from pattern_core import PatternCore
+import project_exchange
 from sim_backend import PPMU_RANGES, SimBackend
 
 DEFAULT_PINS = {"SWCLK": 0, "SWDIO": 1, "nRST": 2, "PA0": 4, "PA1": 5, "PA2": 6, "PA3": 7,
@@ -511,6 +512,49 @@ class NiDigital(Plugin):
         return {"patterns": sorted(getattr(self.backend, "patterns", {}) or [])}
 
     # ------------------------------------------------------------------ project editor
+    def _editor_call(self, method_name, **args):
+        import json
+        rc, result = self._core().invoke(method_name, to_json(args))
+        value = json.loads(result)
+        if rc < 0:
+            raise PluginError(value.get("error", result), rc)
+        return value
+
+    def _editor_template(self):
+        used = (self.config.get("uses") or {}).get("tdc_measure") or {}
+        return os.path.join(used["dir"], "project", "DemoPrj-TDC", "myDemo.digiproj")
+
+    @method("新建 Digital Pattern Editor 原生工程并打开")
+    def editor_project_new(self, name: str):
+        result = self._editor_call("project_new", name=name)
+        result["digiproj"] = project_exchange.write_project(result["project"], self._editor_template())
+        return result
+
+    @method("导入 .digiproj 工程副本并打开；不修改源工程")
+    def editor_project_import(self, path: str, name: str):
+        import re
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            raise ValueError("工程名只能用字母、数字和下划线，且不能以数字开头")
+        self._core()
+        projects = self.options.get("projects_dir") or os.path.join(
+            self.config.get("plugin_dir") or os.path.dirname(os.path.abspath(__file__)), "_work", "projects")
+        destination = os.path.join(projects, name)
+        manifest = project_exchange.copy_project(path, destination)
+        try:
+            self._editor_call("project_open", path=os.path.abspath(destination))
+        except Exception:
+            shutil.rmtree(destination)
+            raise
+        return {"project": os.path.abspath(destination), "digiproj": manifest}
+
+    @method("导出当前工程为可在 NI Digital Pattern Editor 打开的完整目录")
+    def editor_project_export(self, folder: str):
+        if not folder.strip():
+            raise ValueError("请填写导出目标目录")
+        info = self._editor_call("info")
+        manifest = project_exchange.write_project(info["project"], self._editor_template())
+        return {"digiproj": project_exchange.copy_project(manifest, folder)}
+
     # "pe.<method>" belongs to the pattern project core; see pattern_core.py.
     def _core(self):
         if self.pattern_core is None:

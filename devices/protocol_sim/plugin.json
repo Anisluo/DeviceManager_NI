@@ -1,0 +1,13 @@
+{
+  "id": "protocol_sim",
+  "name": "通信协议仿真",
+  "version": "0.1.0",
+  "type": "python",
+  "entry": "protocol_sim:ProtocolSim",
+  "abi": 1,
+  "category": "task",
+  "description": "SWD、SPI、I²C、PCIe TLP、AXI4、UART 和 Classic CAN 的通信时序仿真、字段解码及 VCD/JSON 导出，无需真实硬件。",
+  "capabilities": ["protocol.simulation", "digital.timeline"],
+  "page": "page.json",
+  "default_config": {"simulate": true}
+}

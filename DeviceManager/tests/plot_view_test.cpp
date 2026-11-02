@@ -425,6 +425,22 @@ int main(int argc, char** argv)
         CHECK(near(logic->cursor1(), 3.7e-6, 1e-9));   // snap to compare time, not the vector boundary
     }
 
+    {
+        // Protocol bus annotations render without numeric samples; errors remain visible.
+        LogicView bus;
+        bus.setSize(QSizeF(1000, 122));
+        bus.setData(QVariantList{QVariantMap{{"name", "WDATA"}, {"bus", true},
+            {"annotations", QVariantList{QVariantMap{{"t", 0.0}, {"end", 1e-6},
+                {"label", "0x12345678"}, {"detail", "beat 0"}, {"status", "error"}}}}}}, 1e-6);
+        QImage image(1000, 122, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::white);
+        { QPainter painter(&image); bus.paint(&painter); }
+        int red = 0;
+        for (int y = 0; y < image.height(); ++y)
+            for (int x = 170; x < image.width(); ++x)
+                if (image.pixelColor(x, y) == QColor("#C54747")) ++red;
+        CHECK(bus.laneCount() == 1 && red > 30);
+    }
     std::printf("%s (%d failures)\n", g_failures ? "FAILED" : "ALL OK", g_failures);
     return g_failures ? 1 : 0;
 }

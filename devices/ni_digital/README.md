@@ -76,7 +76,7 @@ tests/             python -m unittest discover -s devices/ni_digital/tests
 
 ## 页面
 
-标签页：PPMU（FV/FI、读数和趋势）· 引脚映射 · 规格 · 电平 · 时序 · 向量 Vector。开短路、SWD、Shmoo 等方法仍在驱动里，序列和脚本照常调用，只是页面上不再显示。
+标签页：PPMU（FV/FI、读数和趋势）· 项目管理 · 引脚映射 · 规格 · 电平 · 时序 · 向量 Vector。开短路、SWD、Shmoo 等方法仍在驱动里，序列和脚本照常调用，只是页面上不再显示。
 
 ## 图形工程编辑器
 
@@ -88,7 +88,12 @@ PPMU 之后的标签按 Digital Pattern Editor 的文档组织：引脚映射、
   `pattern_core.py` 用 ctypes 加载 DLL（的副本），`pe.<方法>` 转发给它；要运行图形时 DLL 再回调本驱动的 `pattern_*` 方法。
   第一次用到时才加载，没有这个 DLL 时驱动其余功能不受影响。
 - 工程在 `_work/projects/` 下，第一次打开时复制一份 DemoPrj-TDC 作为默认工程，不影响 TDC测量 自己的工程。“新建工程”生成 8 个引脚、一个时序集、一个 `main` 图形。新工程没有
-  `.digiproj`，Digital Pattern Editor 可以打开其中的单个表，但不能当工程打开。
+  原生 `.digiproj` 可通过项目管理页的“新建并打开”生成。
+- **项目管理**：新建、切换本地工程；输入 `.digiproj` 完整路径和本地工程名称导入副本；输入一个不存在的目标目录导出当前工程。
+  导入会复制工程目录及项目引用的外部文件，不修改原工程；文件缺失或目标已存在时报错。导出包含 `.digiproj`、引脚映射、规格、电平、时序及二进制向量，
+  在 NI Digital Pattern Editor 中选择打开导出目录中的 `.digiproj`。工程 XML 根据随仓库提供的 NI 21.8 原生工程生成，保留版本信息；
+  已验证本编辑器的新建→编辑→导出→导入以及引用文件完整性，尚未在 NI Digital Pattern Editor 中实测打开。
+  脚本方法：`editor_project_new(name)`、`editor_project_import(path, name)`、`editor_project_export(folder)`。
 - 导出生成 `devices/<id>/`：运行器 DLL 的副本（改名为 `<id>.dll`）、`plugin.json`、`page.json`、`README.md` 和工程副本，
   不需要编译器。点“重新扫描插件”后出现在侧栏“插件”里，自动用检测到的 6571 运行。再次导出同一个 id 会替换它。
 - 向量页左侧是工程树，列出工程的全部向量表（`.digipat`）：点击切换，“添加”输入名字后回车创建，Delete 或“删除”确认后删除，删除前在 `_work/backup/` 留一份，工程至少保留一张。

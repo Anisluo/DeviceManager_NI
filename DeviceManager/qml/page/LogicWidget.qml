@@ -16,6 +16,7 @@ ColumnLayout {
     property var rev: undefined
     property var liveRev: undefined
     property bool shown: false
+    property int laneHeight: 72
     readonly property bool stale: rev !== undefined && liveRev !== undefined && rev !== liveRev
     readonly property double delta: view.cursor2 - view.cursor1
     spacing: 6
@@ -23,6 +24,7 @@ ColumnLayout {
     function show(cap) {
         if (!cap || !cap.lanes || (cap.rev !== undefined && cap.rev === rev)) return
         rev = cap.rev
+        laneHeight = cap.lane_height || 72
         view.setData(cap.lanes, cap.t_end)
         shown = true
     }
@@ -73,7 +75,7 @@ ColumnLayout {
         id: view
         visible: w.shown
         Layout.fillWidth: true
-        Layout.preferredHeight: 50 + 72 * laneCount      // ruler, axis, one strip per pin (LogicView.h)
+        Layout.preferredHeight: 50 + w.laneHeight * laneCount
         textColor: Theme.text
         mutedColor: Theme.textMuted
         faintColor: Theme.textFaint
@@ -90,7 +92,7 @@ ColumnLayout {
     Text {
         visible: w.shown
         Layout.fillWidth: true
-        text: "实线 0/1：驱动    灰色中线虚线 X：不驱动、不比较    蓝色 H/L：期望条件    ◇：Strobe 比较时刻（放大可见）\n当前显示激励与期望，不代表 DUT 实际响应；H/L 的高低位置是逻辑示意。"
+        text: w.spec.legend || "实线 0/1：驱动    灰色中线虚线 X：不驱动、不比较    蓝色 H/L：期望条件    ◇：Strobe 比较时刻（放大可见）\n当前显示激励与期望，不代表 DUT 实际响应；H/L 的高低位置是逻辑示意。"
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontXs

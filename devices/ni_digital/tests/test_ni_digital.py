@@ -16,11 +16,11 @@ from ni_digital import NiDigital  # noqa: E402
 from sim_backend import SimBackend  # noqa: E402
 
 
-def call(p, name, **args):
-    rc, text = p._dm_invoke_json(name, json.dumps(args))
+def call(p, method_name, **args):
+    rc, text = p._dm_invoke_json(method_name, json.dumps(args))
     r = json.loads(text)
     if rc < 0:
-        raise AssertionError(f"{name} -> {rc}: {r}")
+        raise AssertionError(f"{method_name} -> {rc}: {r}")
     return r
 
 
@@ -143,6 +143,26 @@ DLL = os.path.join(HERE, "..", "..", "..", "build", "devices", "tdc_measure", "t
 
 @unittest.skipUnless(os.path.exists(DLL), "tdc_measure is not built")
 class PatternProjectEditor(unittest.TestCase):
+    def test_native_project_lifecycle(self):
+        import xml.etree.ElementTree as ET
+        created = call(self.p, "editor_project_new", name="FreshDigital")
+        self.assertTrue(os.path.isfile(created["digiproj"]))
+        self.assertEqual(call(self.p, "pe.info")["current"], "main")
+        call(self.p, "pe.edit_vector", v=0, field="pin:I0", value="1")
+        exported = call(self.p, "editor_project_export", folder=os.path.join(self.tmp, "export"))
+        root = ET.parse(exported["digiproj"]).getroot()
+        refs = [n.get("StoragePath") for n in root.iter() if n.get("StoragePath")]
+        self.assertEqual(len(refs), 5)
+        imported = call(self.p, "editor_project_import", path=exported["digiproj"], name="ImportedDigital")
+        self.assertNotEqual(imported["project"], created["project"])
+        self.assertEqual(call(self.p, "pe.info")["name"], "ImportedDigital")
+        original = os.path.join(created["project"], "Patterns", "main.digipat")
+        imported_pattern = os.path.join(imported["project"], "Patterns", "main.digipat")
+        with open(original, "rb") as a, open(imported_pattern, "rb") as b:
+            self.assertEqual(a.read(), b.read())
+        rc, _ = self.p._dm_invoke_json("editor_project_import", json.dumps({"path": exported["digiproj"], "name": "ImportedDigital"}))
+        self.assertLess(rc, 0)
+
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
         task = os.path.abspath(os.path.join(HERE, "..", "..", "tdc_measure"))

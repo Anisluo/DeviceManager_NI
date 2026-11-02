@@ -1,4 +1,5 @@
 #include "app/AppController.h"
+#include "app/AnalysisPlot.h"
 #include "app/LogicView.h"
 #include "app/PlotView.h"
 #include "app/SyntaxHighlighter.h"
@@ -11,6 +12,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -66,7 +68,7 @@ static QQuickItem* findItem(QQuickItem* root, const QString& name)
 
 int main(int argc, char* argv[])
 {
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
     QGuiApplication::setOrganizationName("ChipTest");
     QGuiApplication::setApplicationName("DeviceManager");
     QGuiApplication::setApplicationVersion(DM_VERSION);
@@ -136,6 +138,7 @@ int main(int argc, char* argv[])
     qmlRegisterType<SyntaxHighlighter>("DeviceManager.Core", 1, 0, "SyntaxHighlighter");
     qmlRegisterType<PlotView>("DeviceManager.Core", 1, 0, "PlotView");
     qmlRegisterType<LogicView>("DeviceManager.Core", 1, 0, "LogicView");
+    qmlRegisterType<AnalysisPlot>("DeviceManager.Core", 1, 0, "AnalysisPlot");
     qmlRegisterSingletonInstance("DeviceManager.Core", 1, 0, "App", &controller);
     WindowChrome chrome;
     qmlRegisterSingletonInstance("DeviceManager.Core", 1, 0, "WindowChrome", &chrome);

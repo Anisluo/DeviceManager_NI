@@ -26,7 +26,7 @@ RowLayout {
         if (spec.action) ctx.act(spec.action, options[i].value)
     }
     function readInit() {
-        ctx.read(spec.init, v => { const i = indexOfValue(v); if (i >= 0) box.currentIndex = i })
+        ctx.read(spec.init, v => { const i = indexOfValue(v); if (i >= 0) { box.currentIndex = i; store(i) } })
     }
     function reinit() {
         if (!spec.options_from) { readInit(); return }
@@ -50,16 +50,22 @@ RowLayout {
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontMd
-        Layout.preferredWidth: 72
+        Layout.preferredWidth: w.spec.label_width || Theme.fieldLabelWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: Math.min(64, Layout.preferredWidth)
         elide: Text.ElideRight
     }
     DmComboBox {
         id: box
+        objectName: "editor"
         Layout.fillWidth: true
+        Layout.preferredWidth: w.spec.input_width || Theme.comboInputWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: 80
         model: w.options
         textRole: "label"
         enabled: w.ctx && w.ctx.device && w.ctx.device.online
         onActivated: index => { w.store(index); if (w.spec.action) w.ctx.act(w.spec.action, w.options[index].value) }
     }
-    Item { Layout.preferredWidth: 18 }
+    Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
 }

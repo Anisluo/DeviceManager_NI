@@ -72,7 +72,9 @@ ColumnLayout {
                 Item {
                     // with a note the editor keeps a fixed width and the note takes the rest
                     Layout.fillWidth: !rowItem.row.note
-                    Layout.preferredWidth: rowItem.row.note ? 150 : -1
+                    Layout.preferredWidth: Theme.numberInputWidth
+                    Layout.maximumWidth: Theme.comboInputWidth
+                    Layout.minimumWidth: 64
                     Layout.preferredHeight: 34
                     // read-only
                     Text {
@@ -142,6 +144,7 @@ ColumnLayout {
                     font.pixelSize: Theme.fontSm
                     elide: Text.ElideRight
                 }
+                Item { visible: !rowItem.row.note; Layout.fillWidth: true }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border; opacity: 0.5 }
         }

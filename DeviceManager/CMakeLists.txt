@@ -1,4 +1,10 @@
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Sql Widgets PrintSupport)
+
+add_library(dm_qcustomplot STATIC third_party/qcustomplot/qcustomplot.cpp third_party/qcustomplot/qcustomplot.h)
+set_target_properties(dm_qcustomplot PROPERTIES AUTOMOC ON)
+target_include_directories(dm_qcustomplot PUBLIC third_party/qcustomplot)
+target_link_libraries(dm_qcustomplot PUBLIC Qt6::Widgets Qt6::PrintSupport)
+install(FILES third_party/qcustomplot/GPL.txt third_party/qcustomplot/README.md DESTINATION licenses/qcustomplot)
 
 # Embedded Python (pybind11). Hints: -DPython_ROOT_DIR=<python> -Dpybind11_DIR=<.../share/cmake/pybind11>
 find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Embed)
@@ -21,6 +27,7 @@ endif()
 qt_add_executable(DeviceManager WIN32 MACOSX_BUNDLE
     ${DM_APP_RC}
     src/main.cpp
+    src/app/AnalysisPlot.cpp    src/app/AnalysisPlot.h
     src/app/AppController.cpp   src/app/AppController.h
     src/app/SyntaxHighlighter.cpp src/app/SyntaxHighlighter.h
     src/app/PlotView.cpp        src/app/PlotView.h
@@ -51,6 +58,7 @@ set(DM_QML_FILES
     qml/DataPage.qml
     qml/controls/ShmooMap.qml
     qml/page/XyWidget.qml
+    qml/page/AnalysisChartWidget.qml
     qml/page/ShmooWidget.qml
     qml/page/SweepWidget.qml
     qml/page/TextWidget.qml
@@ -99,7 +107,7 @@ qt_add_resources(DeviceManager "app_icons"
 
 target_include_directories(DeviceManager PRIVATE src)
 target_link_libraries(DeviceManager PRIVATE dm::sdk pybind11::embed
-    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Sql)
+    Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Sql dm_qcustomplot)
 
 if(WIN32)
     target_link_libraries(DeviceManager PRIVATE dwmapi)      # WindowChrome: DwmExtendFrameIntoClientArea
@@ -132,6 +140,22 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/sdk/python/ DESTINATION sdk/python PATTERN
 
 # PlotView: 1M-point paint time and the zoom gestures through real mouse / wheel events
 if(DM_BUILD_TESTS)
+    qt_add_executable(form_layout_test tests/form_layout_test.cpp)
+    target_link_libraries(form_layout_test PRIVATE Qt6::Quick Qt6::QuickControls2)
+    target_compile_definitions(form_layout_test PRIVATE DM_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
+    set_target_properties(form_layout_test PROPERTIES WIN32_EXECUTABLE OFF)
+    add_test(NAME plugin_form_layout COMMAND form_layout_test)
+    set_tests_properties(plugin_form_layout PROPERTIES TIMEOUT 30)
+    qt_add_executable(analysis_performance_test tests/analysis_performance_test.cpp src/app/AnalysisPlot.cpp src/app/AnalysisPlot.h)
+    target_link_libraries(analysis_performance_test PRIVATE Qt6::Quick dm_qcustomplot)
+    set_target_properties(analysis_performance_test PROPERTIES WIN32_EXECUTABLE OFF)
+    add_test(NAME analysis_mouse_performance COMMAND analysis_performance_test ${CMAKE_BINARY_DIR}/performance/analysis_mouse.json)
+    set_tests_properties(analysis_mouse_performance PROPERTIES TIMEOUT 120 RUN_SERIAL TRUE LABELS "performance;acceptance")
+    qt_add_executable(analysis_plot_test tests/analysis_plot_test.cpp src/app/AnalysisPlot.cpp src/app/AnalysisPlot.h)
+    target_link_libraries(analysis_plot_test PRIVATE Qt6::Quick dm_qcustomplot)
+    set_target_properties(analysis_plot_test PROPERTIES WIN32_EXECUTABLE OFF)
+    add_test(NAME analysis_qcustomplot COMMAND analysis_plot_test)
+    set_tests_properties(analysis_qcustomplot PROPERTIES TIMEOUT 30)
     qt_add_executable(plot_view_test tests/plot_view_test.cpp src/app/PlotView.cpp src/app/PlotView.h
         src/app/LogicView.cpp src/app/LogicView.h)
     target_link_libraries(plot_view_test PRIVATE Qt6::Core Qt6::Gui Qt6::Quick)

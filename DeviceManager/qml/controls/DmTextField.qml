@@ -1,10 +1,17 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 import DeviceManager
 
 TextField {
     id: control
     property bool invalid: false
+    implicitHeight: Theme.inputHeight
+    Layout.preferredHeight: Theme.inputHeight
+    Layout.minimumHeight: Theme.inputHeight
+    Layout.maximumHeight: Theme.inputHeight
+    Layout.maximumWidth: Theme.textInputWidth
+    verticalAlignment: TextInput.AlignVCenter
 
     font.family: Theme.sans
     font.pixelSize: Theme.fontMd

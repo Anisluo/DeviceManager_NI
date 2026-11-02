@@ -22,6 +22,7 @@ Loader {
         "log":     logComp,
         "script":  scriptComp,
         "xy":      xyComp,
+        "analysis_chart": analysisChartComp,
         "shmoo":   shmooComp,
         "sweep":   sweepComp,
         "text":    textComp,
@@ -44,6 +45,7 @@ Loader {
     Component { id: logComp;     LogWidget     { spec: host.spec; ctx: host.pageCtx } }
     Component { id: scriptComp;  ScriptWidget  { spec: host.spec; ctx: host.pageCtx } }
     Component { id: xyComp;      XyWidget      { spec: host.spec; ctx: host.pageCtx } }
+    Component { id: analysisChartComp; AnalysisChartWidget { spec: host.spec; ctx: host.pageCtx } }
     Component { id: shmooComp;   ShmooWidget   { spec: host.spec; ctx: host.pageCtx } }
     Component { id: sweepComp;   SweepWidget   { spec: host.spec; ctx: host.pageCtx } }
     Component { id: textComp;    TextWidget    { spec: host.spec; ctx: host.pageCtx } }

@@ -100,6 +100,7 @@ ColumnLayout {
                         DmTextField {
                             Layout.fillWidth: true
                             Layout.minimumWidth: 40
+                            Layout.maximumWidth: Theme.numberInputWidth
                             implicitWidth: 60
                             horizontalAlignment: Text.AlignRight
                             text: Fmt.eng(axisRow.axis[modelData])

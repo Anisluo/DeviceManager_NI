@@ -1,0 +1,7 @@
+{
+  "id": "signal_analysis", "name": "信号分析 · FFT与滤波", "version": "0.1.0",
+  "type": "python", "entry": "signal_analysis:SignalAnalysis", "abi": 1, "category": "task",
+  "description": "导入 CSV 原始采样数据，配置采样频率与范围，FFT 幅度谱/PSD，IIR/FIR/陷波/平滑滤波，QCustomPlot 时域与频域对比。",
+  "capabilities": ["signal.analysis", "fft", "filter"], "page": "page.json",
+  "default_config": {"simulate": true}
+}

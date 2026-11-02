@@ -1,9 +1,15 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import QtQuick.Layouts
 import DeviceManager
 
 ComboBox {
     id: control
+    implicitHeight: Theme.inputHeight
+    Layout.preferredHeight: Theme.inputHeight
+    Layout.minimumHeight: Theme.inputHeight
+    Layout.maximumHeight: Theme.inputHeight
+    Layout.maximumWidth: Theme.comboInputWidth
     font.family: Theme.sans
     font.pixelSize: Theme.fontMd
     hoverEnabled: true

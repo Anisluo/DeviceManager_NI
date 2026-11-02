@@ -18,6 +18,7 @@ Item {
     property bool polling: true
     property var values: ({})
     property var form: ({})            // values of action-less inputs, referenced as "$form.<id>"
+    property var chartSelections: ({}) // per-chart curve visibility survives tab changes
     // Rejected spreadsheet input survives tab changes until corrected or undone.
     property var tableDrafts: ({})
     property int tableWrites: 0

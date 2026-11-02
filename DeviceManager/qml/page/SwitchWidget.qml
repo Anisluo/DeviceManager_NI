@@ -23,7 +23,8 @@ RowLayout {
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontMd
-        Layout.preferredWidth: 72
+        Layout.preferredWidth: w.spec.label_width || Theme.fieldLabelWidth
+        Layout.maximumWidth: Layout.preferredWidth
         elide: Text.ElideRight
     }
     DmSwitch {

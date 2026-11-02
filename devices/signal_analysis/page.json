@@ -1,0 +1,848 @@
+{
+ "title": "信号分析 · FFT与滤波",
+ "subtitle": "CSV 原始数据 · 采样配置 · FFT / PSD · IIR / FIR / 平滑 · QCustomPlot",
+ "columns": 12,
+ "sources": [
+  {
+   "id": "info",
+   "method": "info",
+   "interval_ms": 3000
+  },
+  {
+   "id": "analysis",
+   "method": "result",
+   "interval_ms": 5000
+  }
+ ],
+ "tabs": [
+  {
+   "title": "导入与采样",
+   "sections": [
+    {
+     "title": "CSV 数据导入",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "csv_path",
+       "label": "CSV 路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "delimiter",
+       "label": "分隔符",
+       "options": [
+        "auto",
+        "comma",
+        "semicolon",
+        "tab",
+        "pipe"
+       ],
+       "value": "auto"
+      },
+      {
+       "type": "combo",
+       "id": "header",
+       "label": "有表头",
+       "options": [
+        "yes",
+        "no"
+       ],
+       "value": "yes"
+      },
+      {
+       "type": "number",
+       "id": "skip_rows",
+       "label": "跳过行数",
+       "value": 0,
+       "min": 0,
+       "max": 1000000,
+       "unit": "",
+       "decimals": 0
+      },
+      {
+       "type": "combo",
+       "id": "encoding",
+       "label": "编码",
+       "options": [
+        "utf-8-sig",
+        "gb18030",
+        "utf-16"
+       ],
+       "value": "utf-8-sig"
+      },
+      {
+       "type": "button",
+       "label": "导入 CSV",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "load_csv",
+        "args": {
+         "path": "$form.csv_path",
+         "delimiter": "$form.delimiter",
+         "header": "$form.header",
+         "skip_rows": "$form.skip_rows",
+         "encoding": "$form.encoding"
+        }
+       },
+       "refresh": [
+        "info",
+        "analysis"
+       ],
+       "reload_page": true
+      },
+      {
+       "type": "button",
+       "label": "载入双音示例",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "demo",
+        "args": {}
+       },
+       "refresh": [
+        "info",
+        "analysis"
+       ],
+       "reload_page": true
+      }
+     ],
+     "span": 6,
+     "subtitle": "填写完整文件路径。支持逗号、分号、制表符，UTF-8 / GB18030 / UTF-16。无效数据不会静默丢弃。"
+    },
+    {
+     "title": "采样配置",
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "data_column",
+       "label": "信号列",
+       "options": [],
+       "value": 1,
+       "init": {
+        "method": "settings",
+        "field": "sampling.data_column"
+       },
+       "options_from": {
+        "method": "column_options",
+        "args": {
+         "time": false
+        },
+        "field": "columns"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "time_column",
+       "label": "时间列",
+       "options": [],
+       "value": 0,
+       "init": {
+        "method": "settings",
+        "field": "sampling.time_column"
+       },
+       "options_from": {
+        "method": "column_options",
+        "args": {
+         "time": true
+        },
+        "field": "columns"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "fs_mode",
+       "label": "Fs 来源",
+       "options": [
+        "manual",
+        "time"
+       ],
+       "value": "manual",
+       "init": {
+        "method": "settings",
+        "field": "sampling.fs_mode"
+       }
+      },
+      {
+       "type": "number",
+       "id": "sample_rate",
+       "label": "采样频率",
+       "value": 10000,
+       "min": 1e-09,
+       "max": 1000000000000.0,
+       "unit": "Hz",
+       "decimals": 6,
+       "init": {
+        "method": "settings",
+        "field": "sampling.sample_rate"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "time_unit",
+       "label": "时间列单位",
+       "options": [
+        "s",
+        "ms",
+        "us",
+        "ns"
+       ],
+       "value": "s",
+       "init": {
+        "method": "settings",
+        "field": "sampling.time_unit"
+       }
+      },
+      {
+       "type": "number",
+       "id": "start",
+       "label": "起始点",
+       "value": 0,
+       "min": 0,
+       "max": 999999,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "sampling.start"
+       }
+      },
+      {
+       "type": "number",
+       "id": "count",
+       "label": "采样点数",
+       "value": 0,
+       "min": 0,
+       "max": 1000000,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "sampling.count"
+       }
+      },
+      {
+       "type": "number",
+       "id": "gain",
+       "label": "数据增益",
+       "value": 1,
+       "min": -1000000000000.0,
+       "max": 1000000000000.0,
+       "unit": "",
+       "decimals": 6,
+       "init": {
+        "method": "settings",
+        "field": "sampling.gain"
+       }
+      },
+      {
+       "type": "number",
+       "id": "offset",
+       "label": "数据偏置",
+       "value": 0,
+       "min": -1000000000000.0,
+       "max": 1000000000000.0,
+       "unit": "",
+       "decimals": 6,
+       "init": {
+        "method": "settings",
+        "field": "sampling.offset"
+       }
+      },
+      {
+       "type": "text",
+       "id": "unit",
+       "label": "幅度单位",
+       "value": "V",
+       "mono": true,
+       "init": {
+        "method": "settings",
+        "field": "sampling.unit"
+       }
+      },
+      {
+       "type": "button",
+       "label": "应用采样并计算 FFT",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "configure_sampling",
+        "args": {
+         "data_column": "$form.data_column",
+         "time_column": "$form.time_column",
+         "fs_mode": "$form.fs_mode",
+         "sample_rate": "$form.sample_rate",
+         "time_unit": "$form.time_unit",
+         "start": "$form.start",
+         "count": "$form.count",
+         "gain": "$form.gain",
+         "offset": "$form.offset",
+         "unit": "$form.unit"
+        }
+       },
+       "refresh": [
+        "info",
+        "analysis"
+       ],
+       "reload_page": true
+      }
+     ],
+     "span": 6,
+     "subtitle": "列号、起始点从 0 开始，采样点数 0=到文件末尾。manual 手动 Fs；time 从时间列推算。选择时间列时要求等间隔。应用采样会暂时关闭滤波并重置 FFT 点数，请随后设置滤波器。"
+    },
+    {
+     "title": "当前数据",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "文件",
+       "source": "info",
+       "field": "path"
+      },
+      {
+       "type": "readout",
+       "label": "数据行数",
+       "source": "info",
+       "field": "samples"
+      },
+      {
+       "type": "readout",
+       "label": "列",
+       "source": "info",
+       "field": "column_names"
+      },
+      {
+       "type": "readout",
+       "label": "状态",
+       "source": "info",
+       "field": "status"
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    },
+    {
+     "title": "原始文件预览（前 15 行）",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "info",
+       "rows_field": "preview",
+       "columns": [
+        {
+         "field": "line",
+         "label": "CSV 行号"
+        },
+        {
+         "field": "values",
+         "label": "各列原始内容"
+        }
+       ]
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    }
+   ]
+  },
+  {
+   "title": "FFT与滤波",
+   "sections": [
+    {
+     "title": "滤波器",
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "family",
+       "label": "算法",
+       "options": [
+        "none",
+        "butter",
+        "cheby1",
+        "cheby2",
+        "ellip",
+        "bessel",
+        "fir",
+        "notch",
+        "moving_average",
+        "median",
+        "savgol"
+       ],
+       "value": "butter",
+       "init": {
+        "method": "settings",
+        "field": "filter.family"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "kind",
+       "label": "通带类型",
+       "options": [
+        "lowpass",
+        "highpass",
+        "bandpass",
+        "bandstop"
+       ],
+       "value": "lowpass",
+       "init": {
+        "method": "settings",
+        "field": "filter.kind"
+       }
+      },
+      {
+       "type": "number",
+       "id": "order",
+       "label": "IIR 阶数",
+       "value": 4,
+       "min": 1,
+       "max": 20,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "filter.order"
+       }
+      },
+      {
+       "type": "number",
+       "id": "cutoff1",
+       "label": "截止/中心 1",
+       "value": 500,
+       "min": 1e-09,
+       "max": 1000000000000.0,
+       "unit": "Hz",
+       "decimals": 3,
+       "init": {
+        "method": "settings",
+        "field": "filter.cutoff1"
+       }
+      },
+      {
+       "type": "number",
+       "id": "cutoff2",
+       "label": "截止频率 2",
+       "value": 2000,
+       "min": 1e-09,
+       "max": 1000000000000.0,
+       "unit": "Hz",
+       "decimals": 3,
+       "init": {
+        "method": "settings",
+        "field": "filter.cutoff2"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "phase",
+       "label": "相位模式",
+       "options": [
+        "zero",
+        "causal"
+       ],
+       "value": "zero",
+       "init": {
+        "method": "settings",
+        "field": "filter.phase"
+       }
+      },
+      {
+       "type": "number",
+       "id": "length",
+       "label": "抽头/窗口",
+       "value": 31,
+       "min": 3,
+       "max": 4095,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "filter.length"
+       }
+      },
+      {
+       "type": "number",
+       "id": "polyorder",
+       "label": "拟合阶数",
+       "value": 3,
+       "min": 0,
+       "max": 100,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "filter.polyorder"
+       }
+      },
+      {
+       "type": "number",
+       "id": "q",
+       "label": "陷波 Q",
+       "value": 30,
+       "min": 0.01,
+       "max": 10000,
+       "unit": "",
+       "decimals": 3,
+       "init": {
+        "method": "settings",
+        "field": "filter.q"
+       }
+      },
+      {
+       "type": "number",
+       "id": "rp",
+       "label": "通带纹波",
+       "value": 1,
+       "min": 0.001,
+       "max": 100,
+       "unit": "dB",
+       "decimals": 3,
+       "init": {
+        "method": "settings",
+        "field": "filter.rp"
+       }
+      },
+      {
+       "type": "number",
+       "id": "rs",
+       "label": "阻带衰减",
+       "value": 60,
+       "min": 0.001,
+       "max": 300,
+       "unit": "dB",
+       "decimals": 3,
+       "init": {
+        "method": "settings",
+        "field": "filter.rs"
+       }
+      }
+     ],
+     "span": 6,
+     "subtitle": "butter=巴特沃斯，cheby1/2=切比雪夫，ellip=椭圆，bessel=贝塞尔，fir=Hamming窗FIR，notch=陷波。窗口/抽头须为奇数。median 与 savgol 使用固定居中窗口。"
+    },
+    {
+     "title": "FFT 设置",
+     "widgets": [
+      {
+       "type": "combo",
+       "id": "window",
+       "label": "窗函数",
+       "options": [
+        "boxcar",
+        "hann",
+        "hamming",
+        "blackman",
+        "blackmanharris",
+        "flattop"
+       ],
+       "value": "hann",
+       "init": {
+        "method": "settings",
+        "field": "fft.window"
+       }
+      },
+      {
+       "type": "number",
+       "id": "nfft",
+       "label": "FFT 点数",
+       "value": 0,
+       "min": 0,
+       "max": 2097152,
+       "unit": "",
+       "decimals": 0,
+       "init": {
+        "method": "settings",
+        "field": "fft.nfft"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "detrend",
+       "label": "去趋势",
+       "options": [
+        "none",
+        "constant",
+        "linear"
+       ],
+       "value": "constant",
+       "init": {
+        "method": "settings",
+        "field": "fft.detrend"
+       }
+      },
+      {
+       "type": "combo",
+       "id": "scale",
+       "label": "频谱尺度",
+       "options": [
+        "psd_db",
+        "psd",
+        "amplitude_db",
+        "amplitude"
+       ],
+       "value": "psd_db",
+       "init": {
+        "method": "settings",
+        "field": "fft.scale"
+       }
+      },
+      {
+       "type": "button",
+       "label": "应用滤波并计算 FFT",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "analyze",
+        "args": {
+         "filter_options": {
+          "family": "$form.family",
+          "kind": "$form.kind",
+          "order": "$form.order",
+          "cutoff1": "$form.cutoff1",
+          "cutoff2": "$form.cutoff2",
+          "phase": "$form.phase",
+          "length": "$form.length",
+          "polyorder": "$form.polyorder",
+          "q": "$form.q",
+          "rp": "$form.rp",
+          "rs": "$form.rs"
+         },
+         "fft_options": {
+          "window": "$form.window",
+          "nfft": "$form.nfft",
+          "detrend": "$form.detrend",
+          "scale": "$form.scale"
+         }
+        }
+       },
+       "refresh": [
+        "analysis",
+        "info"
+       ]
+      }
+     ],
+     "span": 6,
+     "subtitle": "默认 psd_db：单边功率谱密度的 dB 值，10·log10(PSD / 参考密度)，参考为 1 单位²/Hz，不是 dBFS。nfft=0 使用全部采样点，增大只作补零。zero 为双向零相位，causal 为单向滤波。"
+    },
+    {
+     "title": "时域对比",
+     "widgets": [
+      {
+       "type": "analysis_chart",
+       "source": "analysis",
+       "field": "time",
+       "height": 360,
+       "hint": "请先应用采样配置并分析"
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    },
+    {
+     "title": "FFT 频谱对比",
+     "widgets": [
+      {
+       "type": "analysis_chart",
+       "source": "analysis",
+       "field": "spectrum",
+       "height": 360,
+       "hint": "请先应用采样配置并分析"
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    },
+    {
+     "title": "滤波器幅频响应",
+     "widgets": [
+      {
+       "type": "analysis_chart",
+       "source": "analysis",
+       "field": "response",
+       "height": 360,
+       "hint": "无滤波或中值滤波没有线性幅频响应"
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    }
+   ]
+  },
+  {
+   "title": "结果与导出",
+   "sections": [
+    {
+     "title": "采样与频率分辨率",
+     "widgets": [
+      {
+       "type": "readout",
+       "label": "有效采样点",
+       "source": "analysis",
+       "field": "count"
+      },
+      {
+       "type": "readout",
+       "label": "采样频率",
+       "source": "analysis",
+       "field": "sample_rate",
+       "unit": "Hz"
+      },
+      {
+       "type": "readout",
+       "label": "Nyquist",
+       "source": "analysis",
+       "field": "nyquist",
+       "unit": "Hz"
+      },
+      {
+       "type": "readout",
+       "label": "记录时长 N/Fs",
+       "source": "analysis",
+       "field": "duration",
+       "unit": "s"
+      },
+      {
+       "type": "readout",
+       "label": "记录分辨率 Fs/N",
+       "source": "analysis",
+       "field": "resolution",
+       "unit": "Hz"
+      },
+      {
+       "type": "readout",
+       "label": "FFT 栅格间距",
+       "source": "analysis",
+       "field": "bin_spacing",
+       "unit": "Hz"
+      }
+     ],
+     "span": 12,
+     "subtitle": "补零可以加密 FFT 栅格，不能增加原始记录的频率分辨能力。"
+    },
+    {
+     "title": "统计结果",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "analysis",
+       "rows_field": "stats",
+       "columns": [
+        {
+         "field": "signal",
+         "label": "数据"
+        },
+        {
+         "field": "mean",
+         "label": "均值",
+         "digits": 6
+        },
+        {
+         "field": "rms",
+         "label": "RMS",
+         "digits": 6
+        },
+        {
+         "field": "std",
+         "label": "标准差",
+         "digits": 6
+        },
+        {
+         "field": "pp",
+         "label": "峰峰值",
+         "digits": 6
+        },
+        {
+         "field": "peak_frequency",
+         "label": "主峰",
+         "unit": "Hz"
+        },
+        {
+         "field": "peak_amplitude",
+         "label": "主峰幅值",
+         "digits": 6
+        }
+       ]
+      }
+     ],
+     "span": 12,
+     "subtitle": "主峰排除 DC，使用 FFT 栅格峰值；非整周期信号可能有泄漏和幅值栅栏效应。"
+    },
+    {
+     "title": "滤波后前十个局部谱峰",
+     "widgets": [
+      {
+       "type": "table",
+       "source": "analysis",
+       "rows_field": "peaks",
+       "columns": [
+        {
+         "field": "rank",
+         "label": "序号"
+        },
+        {
+         "field": "frequency",
+         "label": "频率",
+         "unit": "Hz"
+        },
+        {
+         "field": "amplitude",
+         "label": "峰值幅度",
+         "digits": 6
+        }
+       ]
+      }
+     ],
+     "span": 12,
+     "subtitle": ""
+    },
+    {
+     "title": "导出",
+     "widgets": [
+      {
+       "type": "text",
+       "id": "export_path",
+       "label": "输出路径",
+       "value": "",
+       "mono": true
+      },
+      {
+       "type": "combo",
+       "id": "export_kind",
+       "label": "内容",
+       "options": [
+        "time",
+        "spectrum",
+        "settings"
+       ],
+       "value": "time"
+      },
+      {
+       "type": "button",
+       "label": "导出结果",
+       "style": "primary",
+       "fit": true,
+       "action": {
+        "method": "export",
+        "args": {
+         "path": "$form.export_path",
+         "kind": "$form.export_kind"
+        }
+       },
+       "publish": "exported"
+      },
+      {
+       "type": "readout",
+       "label": "已导出",
+       "source": "exported",
+       "field": "path"
+      }
+     ],
+     "span": 12,
+     "subtitle": "time：全分辨率时域 CSV；spectrum：完整频谱 CSV（幅度和 PSD）；settings：配置 JSON。目标文件须不存在。绘图会压缩显示点数，计算和导出始终使用完整数据。"
+    }
+   ]
+  }
+ ]
+}

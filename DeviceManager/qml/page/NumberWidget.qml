@@ -35,7 +35,11 @@ RowLayout {
         ctx.act(spec.action, v, ok => { pending = false; failed = !ok })
     }
     function reinit() {
-        ctx.read(spec.init, v => { if (typeof v === "number") { value = v; field.text = display(v) } })
+        ctx.read(spec.init, v => {
+            if (typeof v !== "number") return
+            value = v; field.text = display(v)
+            if (!spec.action && spec.id) ctx.form[spec.id] = v
+        })
     }
 
     Component.onCompleted: {
@@ -43,19 +47,31 @@ RowLayout {
         if (!spec.action && spec.id) ctx.form[spec.id] = value
         reinit()
     }
-    Connections { target: w.ctx; function onReinitRequested() { w.reinit() } }
+    Connections {
+        target: w.ctx
+        function onReinitRequested() { w.reinit() }
+        function onFlushRequested() {
+            if (!w.spec.action && field.text !== w.display(w.value)) w.apply(Fmt.parseNumber(field.text))
+        }
+    }
 
     Text {
         text: w.spec.label || ""
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontMd
-        Layout.preferredWidth: 72
+        Layout.preferredWidth: w.spec.label_width || Theme.fieldLabelWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: Math.min(64, Layout.preferredWidth)
         elide: Text.ElideRight
     }
     DmTextField {
         id: field
+        objectName: "editor"
         Layout.fillWidth: true
+        Layout.preferredWidth: w.spec.input_width || Theme.numberInputWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: 64
         horizontalAlignment: Text.AlignRight
         invalid: w.failed
         enabled: w.ctx && w.ctx.device && w.ctx.device.online
@@ -78,6 +94,8 @@ RowLayout {
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontMd
-        Layout.preferredWidth: 18
+        visible: text !== ""
+        Layout.preferredWidth: Math.max(18, implicitWidth)
     }
+    Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
 }

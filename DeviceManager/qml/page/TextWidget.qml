@@ -23,7 +23,10 @@ RowLayout {
     Component.onCompleted: {
         field.text = spec.value !== undefined ? String(spec.value) : ""
         if (!spec.action && spec.id) ctx.form[spec.id] = field.text
+        reinit()
     }
+    function reinit() { if (spec.init) ctx.read(spec.init, v => { if (v !== undefined) field.text = String(v) }) }
+    Connections { target: w.ctx; function onReinitRequested() { w.reinit() } }
 
     Text {
         text: w.spec.label || ""
@@ -31,16 +34,23 @@ RowLayout {
         color: Theme.textMuted
         font.family: Theme.sans
         font.pixelSize: Theme.fontMd
-        Layout.preferredWidth: 72
+        Layout.preferredWidth: w.spec.label_width || Theme.fieldLabelWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: Math.min(64, Layout.preferredWidth)
         elide: Text.ElideRight
     }
     DmTextField {
         id: field
+        objectName: "editor"
         Layout.fillWidth: true
+        Layout.preferredWidth: w.spec.input_width || Theme.textInputWidth
+        Layout.maximumWidth: Layout.preferredWidth
+        Layout.minimumWidth: 80
         placeholderText: w.spec.placeholder || ""
         font.family: w.spec.mono ? Theme.mono : Theme.sans
         onAccepted: w.commit()
         // kept current while typing: clicking a button does not take the focus from the field
         onTextChanged: if (!w.spec.action && w.spec.id) w.ctx.form[w.spec.id] = text
     }
+    Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
 }

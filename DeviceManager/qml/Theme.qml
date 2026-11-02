@@ -57,6 +57,11 @@ QtObject {
     readonly property int radiusSm: 8
     readonly property int gap:      16
     readonly property int pad:      20
+    readonly property int inputHeight: 34
+    readonly property int fieldLabelWidth: 96
+    readonly property int numberInputWidth: 200
+    readonly property int comboInputWidth: 240
+    readonly property int textInputWidth: 440
 
     function toneColor(tone) {
         switch (tone) {
